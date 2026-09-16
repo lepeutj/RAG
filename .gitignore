@@ -1,0 +1,23 @@
+# Environnement / secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Données générées / index vectoriel
+storage/
+
+# Tests / cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / éditeurs
+.DS_Store
+.vscode/
+.idea/
