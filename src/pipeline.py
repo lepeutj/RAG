@@ -1,8 +1,7 @@
-"""
-Pipeline RAG: point d'orchestration entre ingestion, retrieval et génération.
+"""RAG pipeline orchestration for ingestion, retrieval, and generation.
 
-C'est la façade que l'API (et les scripts CLI) appellent. Elle ne connaît
-pas les détails d'implémentation de chaque composant, juste leurs interfaces.
+This is the facade used by the API and CLI scripts. It depends on component
+interfaces rather than their implementation details.
 """
 from __future__ import annotations
 
@@ -52,8 +51,7 @@ class RAGPipeline:
             top_k=settings.top_k,
             similarity_threshold=settings.similarity_threshold,
         )
-        # Le LLM est instancié en lazy pour ne pas exiger de clé API
-        # juste pour faire de l'ingestion.
+        # Instantiate the LLM lazily so ingestion does not require an API key.
         self._llm = None
 
     def _get_llm(self):
@@ -71,12 +69,13 @@ class RAGPipeline:
         return self._llm
 
     def ingest_directory(self, directory: Path) -> int:
-        """Ingère tous les documents d'un dossier. Retourne le nb de chunks créés."""
+        """Ingest every supported document in a directory and return the chunk count."""
         documents = self._loader.load_directory(directory)
         return self._ingest_documents(documents)
 
-    def ingest_file(self, path: Path) -> int:
-        document = self._loader.load_file(path)
+    def ingest_file(self, path: Path, source: str | None = None) -> int:
+        """Ingest a file while preserving its logical identifier when provided."""
+        document = self._loader.load_file(path, source=source)
         return self._ingest_documents([document])
 
     def _ingest_documents(self, documents) -> int:
@@ -85,14 +84,14 @@ class RAGPipeline:
             all_chunks.extend(self._chunker.split_document(document))
 
         if not all_chunks:
-            logger.warning("Aucun chunk produit lors de l'ingestion.")
+            logger.warning("No chunks were created during ingestion.")
             return 0
 
         texts = [c.text for c in all_chunks]
         embeddings = self._embedder.embed(texts)
         self._vector_store.add_chunks(all_chunks, embeddings)
 
-        logger.info("Ingestion terminée: %d documents -> %d chunks", len(documents), len(all_chunks))
+        logger.info("Ingestion complete: %d documents -> %d chunks", len(documents), len(all_chunks))
         return len(all_chunks)
 
     def query(self, question: str, top_k: int | None = None) -> RAGAnswer:
@@ -100,7 +99,7 @@ class RAGPipeline:
 
         if not chunks:
             return RAGAnswer(
-                answer="Je n'ai trouvé aucun document pertinent pour répondre à cette question.",
+                answer="I could not find any relevant document to answer this question.",
                 sources=[],
                 retrieved_chunks=[],
             )

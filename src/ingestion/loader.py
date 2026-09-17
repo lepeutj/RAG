@@ -1,9 +1,7 @@
-"""
-Chargement de documents depuis le disque.
+"""Document loading from disk.
 
-Objectif pédagogique : montrer qu'on sait normaliser des formats hétérogènes
-(txt, md, pdf) vers une structure de données commune (`Document`) avant de
-les envoyer dans le pipeline de chunking/embedding.
+Supported formats are normalized into a shared ``Document`` structure before
+they are sent to the chunking and embedding pipeline.
 """
 from __future__ import annotations
 
@@ -20,7 +18,7 @@ SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
 
 @dataclass
 class Document:
-    """Représentation normalisée d'un document source, avant chunking."""
+    """Normalized representation of a source document before chunking."""
 
     content: str
     source: str  # chemin ou identifiant d'origine
@@ -28,14 +26,14 @@ class Document:
 
 
 class DocumentLoader:
-    """Charge un fichier ou un dossier entier vers une liste de `Document`."""
+    """Load a file or all supported files in a directory into ``Document`` objects."""
 
-    def load_file(self, path: Path) -> Document:
+    def load_file(self, path: Path, source: str | None = None) -> Document:
         path = Path(path)
         if path.suffix not in SUPPORTED_EXTENSIONS:
             raise ValueError(
-                f"Extension non supportée: {path.suffix}. "
-                f"Supportées: {SUPPORTED_EXTENSIONS}"
+                f"Unsupported extension: {path.suffix}. "
+                f"Supported extensions: {SUPPORTED_EXTENSIONS}"
             )
 
         if path.suffix == ".pdf":
@@ -43,10 +41,11 @@ class DocumentLoader:
         else:
             text = path.read_text(encoding="utf-8", errors="ignore")
 
+        source = source or str(path)
         return Document(
             content=text,
-            source=str(path),
-            metadata={"filename": path.name, "extension": path.suffix},
+            source=source,
+            metadata={"filename": Path(source).name, "extension": path.suffix},
         )
 
     def load_directory(self, directory: Path) -> list[Document]:
@@ -58,9 +57,9 @@ class DocumentLoader:
                 try:
                     documents.append(self.load_file(path))
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("Échec du chargement de %s: %s", path, exc)
+                    logger.warning("Failed to load %s: %s", path, exc)
 
-        logger.info("Chargé %d documents depuis %s", len(documents), directory)
+        logger.info("Loaded %d documents from %s", len(documents), directory)
         return documents
 
     @staticmethod

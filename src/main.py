@@ -1,8 +1,7 @@
-"""
-Point d'entrée de l'application FastAPI.
+"""FastAPI application entry point.
 
-Lancement local:      uvicorn src.main:app --reload
-Lancement en prod:     voir deploy/rag-system.service ou docker-compose.yml
+Run locally with ``uvicorn src.main:app --reload``.
+For production, see ``deploy/rag-system.service`` or ``docker-compose.yml``.
 """
 from __future__ import annotations
 
@@ -23,18 +22,18 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Initialisation du pipeline RAG (chargement du modèle d'embedding, etc.)...")
+    logger.info("Initializing the RAG pipeline (loading the embedding model, etc.)...")
     pipeline = RAGPipeline(settings)
     app.state.pipeline = pipeline
     app.dependency_overrides[routes.get_pipeline] = lambda: pipeline
-    logger.info("Pipeline prêt. %s", pipeline.stats())
+    logger.info("Pipeline ready. %s", pipeline.stats())
     yield
-    logger.info("Arrêt de l'application.")
+    logger.info("Application stopped.")
 
 
 app = FastAPI(
     title=settings.app_name,
-    description="Système RAG (Retrieval-Augmented Generation) — démonstration technique.",
+    description="Retrieval-Augmented Generation (RAG) system — technical demonstration.",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -42,13 +41,14 @@ app = FastAPI(
 
 @app.middleware("http")
 async def check_api_key(request: Request, call_next):
-    """Protection simple par clé API si RAG_API_KEY est définie (utile en prod sur VPS)."""
-    if settings.api_key and request.url.path not in ("/health", "/docs", "/openapi.json"):
+    """Use a simple API key guard when ``RAG_API_KEY`` is configured."""
+    public_paths = {"/api/v1/health", "/docs", "/openapi.json"}
+    if settings.api_key and request.url.path not in public_paths:
         provided = request.headers.get("x-api-key")
         if provided != settings.api_key:
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Clé API invalide ou manquante."},
+                content={"detail": "Missing or invalid API key."},
             )
     return await call_next(request)
 
