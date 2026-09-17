@@ -162,6 +162,23 @@ Run the test suite with:
 pytest -v
 ```
 
+## Retrieval evaluation
+
+The checked-in evaluation dataset contains representative questions, their expected source documents, and reference answers. The evaluation command measures retrieval only, so it does not need an Anthropic, OpenAI, or llama.cpp server.
+
+First ingest the demonstration corpus, then run:
+
+```bash
+python scripts/evaluate_retrieval.py --top-k 3 --json-output evaluation-results.json
+```
+
+The report includes two metrics:
+
+- **Source recall@k**: the share of expected source documents returned among the top `k` chunks.
+- **Mean reciprocal rank (MRR)**: how high the first expected source appears; `1.0` means first place.
+
+Use the JSON report as a baseline before changing chunking, metadata, hybrid search, or reranking. A future answer-quality evaluator can compare generated responses with the `expected_answer` field in the same dataset.
+
 ## Deployment notes
 
 Docker Compose is the recommended route for a small VPS. It mounts `storage/` for persistent ChromaDB data and `data/` for source documents. The repository also includes example systemd and nginx configurations under `deploy/`.

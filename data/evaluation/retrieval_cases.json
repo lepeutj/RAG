@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "refund-window",
+      "question": "How long do I have to request a refund?",
+      "expected_sources": ["refund-policy.md"],
+      "expected_answer": "A refund can be requested within 30 calendar days of purchase."
+    },
+    {
+      "id": "defective-return-shipping",
+      "question": "Are return shipping costs refunded for defective items?",
+      "expected_sources": ["refund-policy.md"],
+      "expected_answer": "Original delivery charges are refunded only when an item is confirmed to be defective."
+    },
+    {
+      "id": "express-delivery",
+      "question": "When is express delivery available?",
+      "expected_sources": ["delivery-policy.md"],
+      "expected_answer": "Express delivery is available for eligible orders placed before 14:00 Central European Time on business days."
+    },
+    {
+      "id": "standard-delivery",
+      "question": "How long does standard delivery take?",
+      "expected_sources": ["delivery-policy.md"],
+      "expected_answer": "Standard delivery usually takes 3 to 5 business days after dispatch."
+    },
+    {
+      "id": "subscription-cancellation",
+      "question": "How do I cancel my subscription?",
+      "expected_sources": ["subscription-policy.md"],
+      "expected_answer": "A subscription can be cancelled from Account > Subscription at any time."
+    },
+    {
+      "id": "subscription-renewal",
+      "question": "When does my subscription renew?",
+      "expected_sources": ["subscription-policy.md"],
+      "expected_answer": "The subscription renews automatically on the same calendar day each month unless cancelled."
+    }
+  ]
+}
