@@ -1,9 +1,7 @@
-"""
-Retriever: transforme une question utilisateur en chunks pertinents.
+"""Retrieve relevant chunks for a user question.
 
-Sépare la logique de "comment récupérer" (retriever) de "comment stocker"
-(vector store) et de "comment vectoriser" (embedder), pour que chaque
-composant reste testable indépendamment.
+The retrieval layer stays independent from storage and embedding concerns so
+each component can be tested in isolation.
 """
 from __future__ import annotations
 

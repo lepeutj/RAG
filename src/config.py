@@ -1,11 +1,4 @@
-"""
-Configuration centralisée de l'application.
-
-On utilise pydantic-settings pour charger la config depuis les variables
-d'environnement (ou un fichier .env), avec validation de types intégrée.
-Ça évite les `os.environ.get(...)` disséminés partout dans le code et ça
-donne une seule source de vérité, typée, pour toute l'app.
-"""
+"""Centralized, typed application configuration loaded from the environment."""
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -36,9 +29,9 @@ class Settings(BaseSettings):
 
     # --- Retrieval ---
     top_k: int = 5
-    similarity_threshold: float = 0.0  # score minimal pour garder un chunk
+    similarity_threshold: float = 0.0  # minimum similarity score to keep a chunk
 
-    # --- Génération (LLM) ---
+    # --- Generation (LLM) ---
     llm_provider: Literal["anthropic", "openai"] = "anthropic"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"
@@ -50,10 +43,10 @@ class Settings(BaseSettings):
     # --- API ---
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    api_key: str | None = None  # protège l'API en prod, si défini
+    api_key: str | None = None  # protects the API when configured
 
 
 @lru_cache
 def get_settings() -> Settings:
-    """Singleton de config, mis en cache pour éviter de reparser l'env à chaque appel."""
+    """Return cached settings to avoid reparsing the environment for each call."""
     return Settings()

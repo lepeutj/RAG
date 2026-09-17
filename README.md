@@ -1,165 +1,138 @@
 # RAG System
 
-Système de Retrieval-Augmented Generation (RAG) prêt pour déploiement sur VPS.
-Projet de démonstration technique : architecture modulaire, providers
-interchangeables (embeddings/LLM), API REST, tests, et scripts de déploiement.
+A compact, production-oriented Retrieval-Augmented Generation (RAG) service designed to demonstrate the complete path from source documents to cited, grounded answers. It exposes a FastAPI API, stores embeddings in persistent ChromaDB, and supports local or OpenAI embeddings with Anthropic or OpenAI for generation.
 
-## Pourquoi ce projet
+## What this project demonstrates
 
-Le but est de montrer une compréhension du fonctionnement interne d'un
-pipeline RAG plutôt qu'un simple assemblage de librairies :
-
-- **Chunking implémenté "from scratch"** (découpe récursive avec overlap),
-  pas juste un appel à un splitter tout fait.
-- **Architecture en couches avec interfaces abstraites** (`EmbeddingProvider`,
-  `LLMProvider`) : on peut changer de modèle d'embedding ou de LLM en changeant
-  une seule variable d'environnement, sans toucher au code métier.
-- **Embeddings locaux par défaut** (sentence-transformers) : pas de coût API
-  ni de dépendance réseau pour l'étape la plus fréquemment appelée, ce qui a
-  du sens sur un petit VPS.
-- **Tests unitaires et d'intégration**, avec mocks pour isoler les couches.
-- **Deux chemins de déploiement** : Docker (recommandé) ou systemd + nginx.
+- A recursive text chunker implemented in the repository, with semantic separators and overlap.
+- Clear boundaries between document loading, chunking, embeddings, vector storage, retrieval, and generation.
+- Swappable embedding and LLM providers configured through environment variables rather than application code.
+- A persistent local vector store suitable for a small single-node deployment.
+- An HTTP API for ingestion, querying, service health, and index statistics.
+- A small, realistic support-policy corpus for a repeatable end-to-end demo.
 
 ## Architecture
 
-```
-┌─────────────┐      ┌──────────────┐      ┌───────────────┐
-│   Documents │ ───▶ │   Chunking   │ ───▶ │   Embeddings   │
-│ (pdf/md/txt)│      │ (overlap)    │      │ (local/OpenAI) │
-└─────────────┘      └──────────────┘      └───────┬────────┘
-                                                     ▼
-                                            ┌────────────────┐
-                                            │  ChromaDB       │
-                                            │  (persistant)   │
-                                            └───────┬────────┘
-                                                     │
-Question utilisateur ──▶ Embedding query ──▶ Recherche vectorielle
-                                                     │
-                                                     ▼
-                                            ┌────────────────┐
-                                            │  LLM Provider   │
-                                            │ (Anthropic/     │
-                                            │  OpenAI)        │
-                                            └───────┬────────┘
-                                                     ▼
-                                              Réponse + sources
+```text
+Source documents
+      |
+      v
+Document loader --> Recursive chunker --> Embedding provider --> ChromaDB
+                                                                  |
+User question --> Query embedding --> Retriever ------------------+
+                                                                  |
+                                                                  v
+                                                        LLM with retrieved context
+                                                                  |
+                                                                  v
+                                                   Answer, source files, and chunks
 ```
 
-```
-rag-system/
-├── src/
-│   ├── config.py              # config centralisée (pydantic-settings)
-│   ├── main.py                # app FastAPI
-│   ├── pipeline.py            # orchestrateur RAG (façade)
-│   ├── ingestion/
-│   │   ├── loader.py          # chargement txt/md/pdf -> Document
-│   │   └── chunker.py         # découpage récursif + overlap -> Chunk
-│   ├── embeddings/
-│   │   └── embedder.py        # EmbeddingProvider (local / OpenAI)
-│   ├── vectorstore/
-│   │   └── chroma_store.py    # wrapper ChromaDB
-│   ├── retrieval/
-│   │   └── retriever.py       # query -> chunks pertinents
-│   ├── generation/
-│   │   └── llm.py             # LLMProvider (Anthropic / OpenAI) + prompt
-│   └── api/
-│       ├── routes.py          # endpoints /query /ingest /stats /health
-│       └── schemas.py         # schémas Pydantic
-├── scripts/ingest.py          # ingestion CLI en masse
-├── tests/                     # pytest (chunker, retriever, api)
-├── deploy/                    # nginx.conf, rag-system.service (systemd)
-├── Dockerfile / docker-compose.yml
-└── data/documents/            # dossier d'exemple à ingérer
+## Quick start
+
+### 1. Configure the project
+
+```bash
+git clone https://github.com/lepeutj/RAG.git
+cd RAG
+cp .env.example .env
 ```
 
-## Installation locale
+Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `.env`. Local embeddings are the default, so no embedding API key is required unless you set `EMBEDDING_PROVIDER=openai`.
+
+### 2. Start the API with Docker
+
+```bash
+docker compose up -d --build
+curl http://localhost:8000/api/v1/health
+```
+
+Expected response:
+
+```json
+{"status":"ok"}
+```
+
+The first startup downloads the sentence-transformers model and can take a few minutes. The model cache and ChromaDB data are kept in Docker volumes.
+
+### 3. Ingest the demonstration corpus
+
+```bash
+docker compose exec rag-api python scripts/ingest.py --path /app/data/documents
+curl http://localhost:8000/api/v1/stats
+```
+
+The corpus contains policies for refunds, delivery, and subscriptions. The `/stats` response should show a non-zero `chunks_indexed` value.
+
+### 4. Run a grounded query
+
+```bash
+curl -X POST http://localhost:8000/api/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{"question":"How long do I have to request a refund?"}'
+```
+
+The answer should state that the refund request window is 30 days and list `refund-policy.md` in `sources`. The wording may vary because an LLM generates the response.
+
+Try these additional queries to verify retrieval across the corpus:
+
+| Question | Expected source |
+| --- | --- |
+| `When is express delivery available?` | `delivery-policy.md` |
+| `How do I cancel my subscription?` | `subscription-policy.md` |
+| `Are return shipping costs refunded for defective items?` | `refund-policy.md` |
+
+## API overview
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/v1/health` | Liveness endpoint; always public for deployment checks. |
+| `GET /api/v1/stats` | Index size and selected providers. |
+| `POST /api/v1/ingest` | Upload one `.txt`, `.md`, or `.pdf` document. |
+| `POST /api/v1/query` | Retrieve context and generate an answer. |
+
+Interactive OpenAPI documentation is available at `http://localhost:8000/docs`.
+
+If `API_KEY` is set in `.env`, provide it for protected endpoints:
+
+```bash
+curl -H "x-api-key: your-secret" http://localhost:8000/api/v1/stats
+```
+
+## Local development
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # puis renseigner ANTHROPIC_API_KEY (ou OPENAI_API_KEY)
-```
-
-## Utilisation
-
-### 1. Ingérer des documents
-
-```bash
 python scripts/ingest.py --path data/documents
-```
-
-### 2. Lancer l'API
-
-```bash
 uvicorn src.main:app --reload
 ```
 
-Documentation interactive disponible sur `http://localhost:8000/docs`.
-
-### 3. Interroger le système
-
-```bash
-curl -X POST http://localhost:8000/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "Quel est le délai pour un remboursement ?"}'
-```
-
-Réponse :
-```json
-{
-  "answer": "Le délai pour un remboursement est de 30 jours après l'achat...",
-  "sources": ["exemple_politique_remboursement.md"],
-  "chunks": [...]
-}
-```
-
-Ou ajouter un document via l'API :
-```bash
-curl -X POST http://localhost:8000/api/v1/ingest \
-  -F "file=@mon_document.pdf"
-```
-
-## Tests
+Run the test suite with:
 
 ```bash
 pytest -v
 ```
 
-## Déploiement sur VPS
+## Deployment notes
 
-### Option A — Docker (recommandé)
+Docker Compose is the recommended route for a small VPS. It mounts `storage/` for persistent ChromaDB data and `data/` for source documents. The repository also includes example systemd and nginx configurations under `deploy/`.
 
-```bash
-git clone <votre-repo> && cd rag-system
-cp .env.example .env   # renseigner les clés API
-docker compose up -d --build
+This is a technical demonstration, not yet a multi-tenant production system. The next planned improvements are stable document lifecycle management, retrieval evaluation, hybrid retrieval/reranking, CI, and operational metrics.
+
+## Project structure
+
+```text
+src/
+  api/           # FastAPI routes and schemas
+  ingestion/     # loaders and recursive chunking
+  embeddings/    # local and OpenAI embedding providers
+  vectorstore/   # persistent ChromaDB wrapper
+  retrieval/     # similarity retrieval
+  generation/    # Anthropic and OpenAI LLM providers
+scripts/         # command-line ingestion
+data/documents/  # reproducible demo corpus
+tests/           # unit and API contract tests
+deploy/          # nginx and systemd examples
 ```
-
-L'API écoute sur le port 8000. Mettre `deploy/nginx.conf` en reverse proxy
-(avec `certbot` pour le HTTPS) pour l'exposer proprement sur un nom de domaine.
-
-### Option B — systemd (sans Docker)
-
-```bash
-cd /opt && git clone <votre-repo> rag-system && cd rag-system
-python -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env   # renseigner les clés
-sudo cp deploy/rag-system.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now rag-system
-```
-
-## Choix techniques et limites (à discuter en entretien)
-
-- **ChromaDB embedded** plutôt qu'un service séparé (Qdrant/Weaviate) :
-  suffisant jusqu'à quelques centaines de milliers de chunks, sans
-  complexité opérationnelle additionnelle sur un petit VPS.
-- **Pas de reranking ni de requête hybride (BM25 + dense)** dans cette
-  version : piste d'amélioration évidente pour augmenter la précision du
-  retrieval sur des corpus plus larges ou plus techniques.
-- **Pas de gestion de l'historique de conversation** (chaque requête est
-  indépendante) : à ajouter via une mémoire de session si besoin de RAG
-  conversationnel.
-- **Sécurité API minimale** (clé API statique en header) : à remplacer par
-  un vrai système d'auth (JWT/OAuth) en contexte multi-utilisateurs.

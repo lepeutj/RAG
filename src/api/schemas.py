@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 
 class QueryRequest(BaseModel):
-    question: str = Field(..., min_length=1, examples=["Quelle est la politique de remboursement ?"])
+    question: str = Field(..., min_length=1, examples=["What is the refund policy?"])
     top_k: int | None = Field(None, ge=1, le=20)
 
 

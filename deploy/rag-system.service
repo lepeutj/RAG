@@ -1,5 +1,5 @@
-# Alternative à Docker: lancer directement avec uvicorn via systemd.
-# A copier dans /etc/systemd/system/rag-system.service puis:
+# Docker alternative: run uvicorn directly through systemd.
+# Copy to /etc/systemd/system/rag-system.service, then run:
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now rag-system
 

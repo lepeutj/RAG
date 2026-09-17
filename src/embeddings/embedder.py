@@ -1,12 +1,4 @@
-"""
-Providers d'embeddings.
-
-On définit une interface abstraite `EmbeddingProvider` pour pouvoir changer
-de backend (modèle local vs API externe) sans toucher au reste du pipeline
-(Dependency Inversion Principle). En prod sur un petit VPS, le modèle local
-(sentence-transformers) évite tout coût d'API et toute latence réseau pour
-l'étape d'embedding, qui est appelée très fréquemment.
-"""
+"""Embedding providers with interchangeable local and remote backends."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -15,11 +7,11 @@ import numpy as np
 
 
 class EmbeddingProvider(ABC):
-    """Interface commune: du texte en entrée, des vecteurs en sortie."""
+    """Shared interface: text input and vector output."""
 
     @abstractmethod
     def embed(self, texts: list[str]) -> np.ndarray:
-        """Retourne une matrice (n_texts, dimension) de vecteurs float32."""
+        """Return a float32 matrix with shape ``(n_texts, dimension)``."""
 
     @property
     @abstractmethod
@@ -28,11 +20,10 @@ class EmbeddingProvider(ABC):
 
 
 class LocalEmbeddingProvider(EmbeddingProvider):
-    """Embeddings calculés localement via sentence-transformers (CPU-friendly)."""
+    """CPU-friendly local embeddings powered by sentence-transformers."""
 
     def __init__(self, model_name: str):
-        # Import différé: sentence-transformers/torch sont lourds à charger,
-        # on ne paie ce coût que si ce provider est réellement utilisé.
+        # Delay importing heavy dependencies until this provider is used.
         from sentence_transformers import SentenceTransformer
 
         self._model = SentenceTransformer(model_name)
@@ -52,7 +43,7 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):
-    """Embeddings via l'API OpenAI, pour comparaison ou plus haute qualité."""
+    """Embeddings through the OpenAI API for comparison or higher quality."""
 
     def __init__(self, api_key: str, model_name: str = "text-embedding-3-small"):
         from openai import OpenAI
@@ -72,11 +63,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
 
 def build_embedding_provider(provider: str, model_name: str, api_key: str | None = None) -> EmbeddingProvider:
-    """Factory: instancie le bon provider à partir de la config."""
+    """Build the configured embedding provider."""
     if provider == "local":
         return LocalEmbeddingProvider(model_name)
     if provider == "openai":
         if not api_key:
-            raise ValueError("openai_api_key requis pour le provider 'openai'")
+            raise ValueError("openai_api_key is required for the 'openai' provider")
         return OpenAIEmbeddingProvider(api_key=api_key)
-    raise ValueError(f"Provider d'embedding inconnu: {provider}")
+    raise ValueError(f"Unknown embedding provider: {provider}")

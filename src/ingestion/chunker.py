@@ -1,12 +1,4 @@
-"""
-Découpage de texte en chunks.
-
-Implémentation volontairement "from scratch" (plutôt que d'importer
-directement le TextSplitter de LangChain) pour montrer la compréhension du
-problème : on veut des chunks de taille bornée, qui se coupent de préférence
-sur des frontières sémantiques (paragraphe > phrase > mot), avec un overlap
-pour ne pas perdre de contexte à la frontière entre deux chunks.
-"""
+"""Text chunking implementation with semantic separators and overlap."""
 from __future__ import annotations
 
 import re
@@ -14,7 +6,7 @@ from dataclasses import dataclass, field
 
 from src.ingestion.loader import Document
 
-# Séparateurs testés du plus "fort" (paragraphe) au plus faible (caractère)
+# Separators are tried from paragraphs down to individual characters.
 _SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
 
 
@@ -31,11 +23,11 @@ class Chunk:
 
 
 class RecursiveChunker:
-    """Découpe un texte en essayant les séparateurs du plus au moins naturel."""
+    """Split text using progressively less semantic separators."""
 
     def __init__(self, chunk_size: int = 800, chunk_overlap: int = 120):
         if chunk_overlap >= chunk_size:
-            raise ValueError("chunk_overlap doit être strictement inférieur à chunk_size")
+            raise ValueError("chunk_overlap must be strictly smaller than chunk_size")
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
@@ -62,7 +54,7 @@ class RecursiveChunker:
 
         separator, remaining_separators = separators[0], separators[1:]
         if separator == "":
-            # dernier recours: découpe brute par taille
+            # Last resort: fixed-size split.
             return [
                 text[i : i + self.chunk_size]
                 for i in range(0, len(text), self.chunk_size)
@@ -80,7 +72,7 @@ class RecursiveChunker:
                 if buffer:
                     chunks.append(buffer)
                 if len(part) > self.chunk_size:
-                    # la partie elle-même est trop grosse, on redescend d'un niveau
+                    # This part is still too long, so use the next separator.
                     chunks.extend(self._recursive_split(part, remaining_separators))
                     buffer = ""
                 else:
@@ -92,7 +84,7 @@ class RecursiveChunker:
         return chunks
 
     def _merge_with_overlap(self, chunks: list[str]) -> list[str]:
-        """Ajoute un overlap entre chunks consécutifs pour préserver le contexte."""
+        """Add overlap between consecutive chunks to preserve context."""
         if not chunks or self.chunk_overlap == 0:
             return chunks
 

@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Dépendances système minimales (compilation de certains wheels ML)
+# Minimal system dependencies for compiling some machine-learning wheels.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -13,8 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 
-# Le modèle sentence-transformers sera téléchargé et mis en cache au premier
-# lancement dans ce volume, pour ne pas le re-télécharger à chaque restart.
+# The sentence-transformers model is cached in this volume after first startup.
 VOLUME ["/app/storage", "/root/.cache"]
 
 EXPOSE 8000

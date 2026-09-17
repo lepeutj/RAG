@@ -1,11 +1,4 @@
-"""
-Store vectoriel basé sur ChromaDB, en mode persistant sur disque.
-
-Chroma est choisi ici car il tourne "embedded" (pas de service séparé à
-gérer sur le VPS), persiste sur disque, et gère nativement les métadonnées
-et le filtrage — suffisant pour un projet de démonstration sans la
-complexité opérationnelle d'un Qdrant/Milvus en cluster.
-"""
+"""Persistent ChromaDB-backed vector store for the demonstration service."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,7 +21,7 @@ class RetrievedChunk:
 class ChromaVectorStore:
     def __init__(self, persist_path: Path, collection_name: str):
         self._client = chromadb.PersistentClient(path=str(persist_path))
-        # cosine similarity: cohérent avec les embeddings normalisés
+        # Cosine distance is appropriate for normalized embeddings.
         self._collection = self._client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"},
@@ -56,7 +49,7 @@ class ChromaVectorStore:
         distances = results["distances"][0]
 
         for text, metadata, distance in zip(documents, metadatas, distances):
-            # Chroma renvoie une distance cosine; on la convertit en score de similarité
+            # Convert Chroma's cosine distance to a similarity score.
             similarity = 1 - distance
             retrieved.append(
                 RetrievedChunk(

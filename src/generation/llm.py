@@ -1,9 +1,6 @@
-"""
-Providers de génération (LLM).
+"""LLM generation providers.
 
-Même logique que pour les embeddings: interface abstraite + implémentations
-concrètes, pour pouvoir basculer entre Anthropic et OpenAI via une simple
-variable de config, sans changer le code du pipeline.
+The configured provider can be changed without modifying the pipeline.
 """
 from __future__ import annotations
 
@@ -12,10 +9,10 @@ from abc import ABC, abstractmethod
 from src.vectorstore.chroma_store import RetrievedChunk
 
 SYSTEM_PROMPT = (
-    "Tu es un assistant qui répond aux questions en te basant UNIQUEMENT sur "
-    "le contexte fourni. Si le contexte ne contient pas l'information demandée, "
-    "dis clairement que tu ne sais pas plutôt que d'inventer une réponse. "
-    "Cite la source (nom de fichier) des passages que tu utilises."
+    "You are an assistant that answers questions using ONLY the provided context. "
+    "If the context does not contain the requested information, clearly say that "
+    "you do not know instead of inventing an answer. Cite the source filename for "
+    "the passages you use."
 )
 
 
@@ -23,14 +20,14 @@ def build_prompt(query: str, chunks: list[RetrievedChunk]) -> str:
     context_blocks = []
     for i, chunk in enumerate(chunks, start=1):
         source = chunk.metadata.get("filename", chunk.source)
-        context_blocks.append(f"[Extrait {i} - source: {source}]\n{chunk.text}")
+        context_blocks.append(f"[Excerpt {i} - source: {source}]\n{chunk.text}")
 
-    context = "\n\n".join(context_blocks) if context_blocks else "(aucun contexte trouvé)"
+    context = "\n\n".join(context_blocks) if context_blocks else "(no context found)"
 
     return (
-        f"Contexte:\n{context}\n\n"
+        f"Context:\n{context}\n\n"
         f"Question: {query}\n\n"
-        "Réponds de façon précise et concise en te basant sur le contexte ci-dessus."
+        "Answer precisely and concisely using the context above."
     )
 
 
@@ -92,9 +89,9 @@ def build_llm_provider(
     temperature: float,
 ) -> LLMProvider:
     if not api_key:
-        raise ValueError(f"Clé API manquante pour le provider LLM '{provider}'")
+        raise ValueError(f"Missing API key for LLM provider '{provider}'")
     if provider == "anthropic":
         return AnthropicProvider(api_key, model, max_tokens, temperature)
     if provider == "openai":
         return OpenAIProvider(api_key, model, max_tokens, temperature)
-    raise ValueError(f"Provider LLM inconnu: {provider}")
+    raise ValueError(f"Unknown LLM provider: {provider}")

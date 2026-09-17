@@ -1,9 +1,8 @@
-"""
-Script CLI d'ingestion en masse.
+"""Bulk-ingestion CLI script.
 
 Usage:
     python scripts/ingest.py --path data/documents
-    python scripts/ingest.py --path data/documents --reset   # vide l'index avant
+    python scripts/ingest.py --path data/documents --reset   # clears the index first
 """
 from __future__ import annotations
 
@@ -22,24 +21,24 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingère des documents dans l'index vectoriel.")
-    parser.add_argument("--path", type=Path, required=True, help="Fichier ou dossier à ingérer.")
-    parser.add_argument("--reset", action="store_true", help="Vide l'index avant d'ingérer.")
+    parser = argparse.ArgumentParser(description="Ingest documents into the vector index.")
+    parser.add_argument("--path", type=Path, required=True, help="File or directory to ingest.")
+    parser.add_argument("--reset", action="store_true", help="Clear the index before ingestion.")
     args = parser.parse_args()
 
     settings = get_settings()
     pipeline = RAGPipeline(settings)
 
     if args.reset:
-        logger.info("Réinitialisation de l'index vectoriel...")
-        pipeline._vector_store.reset()  # noqa: SLF001 (usage volontaire depuis un script d'admin)
+        logger.info("Resetting vector index...")
+        pipeline._vector_store.reset()  # noqa: SLF001 (intentional admin-script usage)
 
     if args.path.is_dir():
         n_chunks = pipeline.ingest_directory(args.path)
     else:
         n_chunks = pipeline.ingest_file(args.path)
 
-    logger.info("Terminé: %d chunks indexés. Total dans l'index: %d", n_chunks, pipeline.stats()["chunks_indexed"])
+    logger.info("Complete: %d chunks indexed. Total in index: %d", n_chunks, pipeline.stats()["chunks_indexed"])
 
 
 if __name__ == "__main__":

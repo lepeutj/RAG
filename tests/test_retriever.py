@@ -27,9 +27,9 @@ def test_retrieve_calls_embedder_then_vector_store():
         RetrievedChunk(text="a", source="s1", score=0.9, metadata={}),
     ]
 
-    results = retriever.retrieve("ma question")
+    results = retriever.retrieve("my question")
 
-    embedder.embed.assert_called_once_with(["ma question"])
+    embedder.embed.assert_called_once_with(["my question"])
     vector_store.query.assert_called_once()
     assert len(results) == 1
     assert results[0].score == 0.9
@@ -42,7 +42,7 @@ def test_retrieve_filters_by_similarity_threshold():
         RetrievedChunk(text="b", source="s2", score=0.2, metadata={}),
     ]
 
-    results = retriever.retrieve("ma question")
+    results = retriever.retrieve("my question")
 
     assert len(results) == 1
     assert results[0].source == "s1"
@@ -52,7 +52,7 @@ def test_retrieve_respects_custom_top_k():
     retriever, _, vector_store = _make_retriever()
     vector_store.query.return_value = []
 
-    retriever.retrieve("ma question", top_k=10)
+    retriever.retrieve("my question", top_k=10)
 
     _, kwargs = vector_store.query.call_args
     assert kwargs["top_k"] == 10
