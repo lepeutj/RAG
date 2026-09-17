@@ -73,26 +73,65 @@ class RAGPipeline:
         documents = self._loader.load_directory(directory)
         return self._ingest_documents(documents)
 
-    def ingest_file(self, path: Path, source: str | None = None) -> int:
+    def ingest_file(
+        self,
+        path: Path,
+        source: str | None = None,
+        managed_storage: bool = False,
+        storage_path: Path | None = None,
+    ) -> int:
         """Ingest a file while preserving its logical identifier when provided."""
-        document = self._loader.load_file(path, source=source)
-        return self._ingest_documents([document])
+        document = self._loader.load_file(
+            path,
+            source=source,
+            managed_storage=managed_storage,
+            storage_path=storage_path,
+        )
+        return self._ingest_documents([document], reject_empty=True)
 
-    def _ingest_documents(self, documents) -> int:
-        all_chunks = []
+    def _ingest_documents(self, documents, reject_empty: bool = False) -> int:
+        chunks_created = 0
         for document in documents:
-            all_chunks.extend(self._chunker.split_document(document))
+            chunks = self._chunker.split_document(document)
+            document_id = document.metadata["document_id"]
+            if not chunks:
+                if reject_empty:
+                    raise ValueError("Document contains no extractable text.")
+                logger.warning("No chunks were created for %s.", document.source)
+                continue
 
-        if not all_chunks:
-            logger.warning("No chunks were created during ingestion.")
-            return 0
+            embeddings = self._embedder.embed([chunk.text for chunk in chunks])
+            self._vector_store.replace_document_chunks(document_id, chunks, embeddings)
+            chunks_created += len(chunks)
 
-        texts = [c.text for c in all_chunks]
-        embeddings = self._embedder.embed(texts)
-        self._vector_store.add_chunks(all_chunks, embeddings)
+        logger.info("Ingestion complete: %d documents -> %d chunks", len(documents), chunks_created)
+        return chunks_created
 
-        logger.info("Ingestion complete: %d documents -> %d chunks", len(documents), len(all_chunks))
-        return len(all_chunks)
+    def list_documents(self) -> list[dict]:
+        return self._vector_store.list_documents()
+
+    def delete_document(self, document_id: str) -> bool:
+        metadata = self._vector_store.delete_document(document_id)
+        if metadata is None:
+            return False
+
+        if metadata.get("managed_storage"):
+            Path(metadata["storage_path"]).unlink(missing_ok=True)
+        return True
+
+    def reindex_document(self, document_id: str) -> int:
+        metadata = self._vector_store.get_document_metadata(document_id)
+        if metadata is None:
+            raise KeyError(document_id)
+
+        storage_path = Path(metadata["storage_path"])
+        if not storage_path.is_file():
+            raise FileNotFoundError(storage_path)
+        return self.ingest_file(
+            storage_path,
+            source=metadata["source"],
+            managed_storage=bool(metadata.get("managed_storage")),
+        )
 
     def query(self, question: str, top_k: int | None = None) -> RAGAnswer:
         chunks = self._retriever.retrieve(question, top_k=top_k)

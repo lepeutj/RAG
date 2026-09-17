@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # --- Vector store ---
     vector_store_path: Path = Path("./storage/chroma")
+    document_store_path: Path = Path("./storage/documents")
     collection_name: str = "documents"
 
     # --- Retrieval ---

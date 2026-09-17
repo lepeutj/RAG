@@ -23,6 +23,17 @@ class IngestResponse(BaseModel):
     chunks_created: int
 
 
+class DocumentSummary(BaseModel):
+    document_id: str
+    source: str
+    filename: str
+    chunks_indexed: int
+
+
+class DocumentListResponse(BaseModel):
+    documents: list[DocumentSummary]
+
+
 class StatsResponse(BaseModel):
     chunks_indexed: int
     embedding_provider: str

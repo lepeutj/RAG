@@ -6,6 +6,7 @@ they are sent to the chunking and embedding pipeline.
 from __future__ import annotations
 
 import logging
+from hashlib import sha256
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,19 +17,30 @@ logger = logging.getLogger(__name__)
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf"}
 
 
+def document_id_for_source(source: str) -> str:
+    """Return a deterministic, opaque identifier for a logical document source."""
+    return sha256(source.encode("utf-8")).hexdigest()[:24]
+
+
 @dataclass
 class Document:
     """Normalized representation of a source document before chunking."""
 
     content: str
-    source: str  # chemin ou identifiant d'origine
+    source: str  # original path or logical identifier
     metadata: dict = field(default_factory=dict)
 
 
 class DocumentLoader:
     """Load a file or all supported files in a directory into ``Document`` objects."""
 
-    def load_file(self, path: Path, source: str | None = None) -> Document:
+    def load_file(
+        self,
+        path: Path,
+        source: str | None = None,
+        managed_storage: bool = False,
+        storage_path: Path | None = None,
+    ) -> Document:
         path = Path(path)
         if path.suffix not in SUPPORTED_EXTENSIONS:
             raise ValueError(
@@ -45,7 +57,13 @@ class DocumentLoader:
         return Document(
             content=text,
             source=source,
-            metadata={"filename": Path(source).name, "extension": path.suffix},
+            metadata={
+                "document_id": document_id_for_source(source),
+                "filename": Path(source).name,
+                "extension": path.suffix,
+                "storage_path": str(storage_path or path),
+                "managed_storage": managed_storage,
+            },
         )
 
     def load_directory(self, directory: Path) -> list[Document]:

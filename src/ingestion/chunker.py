@@ -19,7 +19,8 @@ class Chunk:
 
     @property
     def id(self) -> str:
-        return f"{self.source}::chunk-{self.chunk_index}"
+        document_id = self.metadata.get("document_id", self.source)
+        return f"{document_id}::chunk-{self.chunk_index}"
 
 
 class RecursiveChunker:

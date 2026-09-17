@@ -88,7 +88,10 @@ Try these additional queries to verify retrieval across the corpus:
 | --- | --- |
 | `GET /api/v1/health` | Liveness endpoint; always public for deployment checks. |
 | `GET /api/v1/stats` | Index size and selected providers. |
+| `GET /api/v1/documents` | List indexed documents and their stable IDs. |
 | `POST /api/v1/ingest` | Upload one `.txt`, `.md`, or `.pdf` document. |
+| `POST /api/v1/documents/{document_id}/reindex` | Rebuild one document's chunks and embeddings. |
+| `DELETE /api/v1/documents/{document_id}` | Remove one document from the index and managed upload store. |
 | `POST /api/v1/query` | Retrieve context and generate an answer. |
 
 Interactive OpenAPI documentation is available at `http://localhost:8000/docs`.
@@ -97,6 +100,31 @@ If `API_KEY` is set in `.env`, provide it for protected endpoints:
 
 ```bash
 curl -H "x-api-key: your-secret" http://localhost:8000/api/v1/stats
+```
+
+### Document lifecycle
+
+Files uploaded through the API are copied to `storage/documents/` and assigned
+a deterministic ID derived from their logical filename. Uploading the same
+filename again replaces its indexed chunks instead of accumulating duplicates.
+
+Use the document list to obtain an ID, then reindex or delete it:
+
+```bash
+curl http://localhost:8000/api/v1/documents
+curl -X POST http://localhost:8000/api/v1/documents/<document_id>/reindex
+curl -X DELETE http://localhost:8000/api/v1/documents/<document_id>
+```
+
+Deleting a document uploaded through the API also removes its managed source
+file. Documents indexed directly from a local directory are removed from the
+vector index only; their original local files are left untouched.
+
+If you created the ChromaDB index with an earlier version of this project,
+rebuild it once to add document-lifecycle metadata:
+
+```bash
+python scripts/ingest.py --path data/documents --reset
 ```
 
 ## Local development
