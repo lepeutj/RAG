@@ -1,6 +1,6 @@
 # RAG System
 
-A compact, production-oriented Retrieval-Augmented Generation (RAG) service designed to demonstrate the complete path from source documents to cited, grounded answers. It exposes a FastAPI API, stores embeddings in persistent ChromaDB, and supports local or OpenAI embeddings with Anthropic or OpenAI for generation.
+A compact, production-oriented Retrieval-Augmented Generation (RAG) service designed to demonstrate the complete path from source documents to cited, grounded answers. It exposes a FastAPI API, stores embeddings in persistent ChromaDB, and supports local or OpenAI embeddings with Anthropic, OpenAI, or a local llama.cpp server for generation.
 
 ## What this project demonstrates
 
@@ -82,6 +82,25 @@ Try these additional queries to verify retrieval across the corpus:
 | `How do I cancel my subscription?` | `subscription-policy.md` |
 | `Are return shipping costs refunded for defective items?` | `refund-policy.md` |
 
+### Use llama.cpp for fully local generation
+
+The default embedding provider is already local. To keep answer generation local as well, run a GGUF model with llama.cpp on the host machine:
+
+```bash
+llama-server -m /absolute/path/to/model.gguf --host 127.0.0.1 --port 8080
+```
+
+Then set the following values in `.env`:
+
+```dotenv
+LLM_PROVIDER=llama_cpp
+LLAMA_CPP_MODEL=local-model
+```
+
+For local development, the default `LLAMA_CPP_BASE_URL=http://127.0.0.1:8080/v1` is correct. If the RAG API runs in Docker, a llama.cpp server bound to the host's `127.0.0.1` is not reachable from the container. Run both services on a private Docker network, or run the RAG API directly on the host instead. Do not expose an unauthenticated llama.cpp port to the public internet.
+
+llama.cpp's server provides an OpenAI-compatible chat-completions endpoint, which is why the project can use the existing OpenAI Python client without sending requests to OpenAI. See the [llama.cpp server documentation](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md).
+
 ## API overview
 
 | Endpoint | Purpose |
@@ -158,7 +177,7 @@ src/
   embeddings/    # local and OpenAI embedding providers
   vectorstore/   # persistent ChromaDB wrapper
   retrieval/     # similarity retrieval
-  generation/    # Anthropic and OpenAI LLM providers
+  generation/    # Anthropic, OpenAI, and llama.cpp LLM providers
 scripts/         # command-line ingestion
 data/documents/  # reproducible demo corpus
 tests/           # unit and API contract tests

@@ -33,11 +33,13 @@ class Settings(BaseSettings):
     similarity_threshold: float = 0.0  # minimum similarity score to keep a chunk
 
     # --- Generation (LLM) ---
-    llm_provider: Literal["anthropic", "openai"] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "llama_cpp"] = "anthropic"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
+    llama_cpp_base_url: str = "http://127.0.0.1:8080/v1"
+    llama_cpp_model: str = "local-model"
     max_tokens: int = 1024
     temperature: float = 0.2
 

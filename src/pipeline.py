@@ -57,14 +57,19 @@ class RAGPipeline:
     def _get_llm(self):
         if self._llm is None:
             s = self._settings
-            api_key = s.anthropic_api_key if s.llm_provider == "anthropic" else s.openai_api_key
-            model = s.anthropic_model if s.llm_provider == "anthropic" else s.openai_model
+            if s.llm_provider == "anthropic":
+                api_key, model, base_url = s.anthropic_api_key, s.anthropic_model, None
+            elif s.llm_provider == "openai":
+                api_key, model, base_url = s.openai_api_key, s.openai_model, None
+            else:
+                api_key, model, base_url = None, s.llama_cpp_model, s.llama_cpp_base_url
             self._llm = build_llm_provider(
                 provider=s.llm_provider,
                 api_key=api_key,
                 model=model,
                 max_tokens=s.max_tokens,
                 temperature=s.temperature,
+                base_url=base_url,
             )
         return self._llm
 

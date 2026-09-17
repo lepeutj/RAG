@@ -81,17 +81,55 @@ class OpenAIProvider(LLMProvider):
         return response.choices[0].message.content
 
 
+class LlamaCppProvider(LLMProvider):
+    """Generate answers through a local llama.cpp OpenAI-compatible server."""
+
+    def __init__(self, base_url: str, model: str, max_tokens: int, temperature: float):
+        from openai import OpenAI
+
+        normalized_base_url = base_url.rstrip("/")
+        if not normalized_base_url.endswith("/v1"):
+            normalized_base_url = f"{normalized_base_url}/v1"
+
+        # The OpenAI client requires a value, while llama.cpp does not require
+        # authentication when it is bound to a local interface.
+        self._client = OpenAI(base_url=normalized_base_url, api_key="not-needed")
+        self._model = model
+        self._max_tokens = max_tokens
+        self._temperature = temperature
+
+    def generate(self, query: str, chunks: list[RetrievedChunk]) -> str:
+        prompt = build_prompt(query, chunks)
+        response = self._client.chat.completions.create(
+            model=self._model,
+            max_tokens=self._max_tokens,
+            temperature=self._temperature,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return response.choices[0].message.content
+
+
 def build_llm_provider(
     provider: str,
     api_key: str | None,
     model: str,
     max_tokens: int,
     temperature: float,
+    base_url: str | None = None,
 ) -> LLMProvider:
-    if not api_key:
-        raise ValueError(f"Missing API key for LLM provider '{provider}'")
     if provider == "anthropic":
+        if not api_key:
+            raise ValueError("Missing API key for LLM provider 'anthropic'")
         return AnthropicProvider(api_key, model, max_tokens, temperature)
     if provider == "openai":
+        if not api_key:
+            raise ValueError("Missing API key for LLM provider 'openai'")
         return OpenAIProvider(api_key, model, max_tokens, temperature)
+    if provider == "llama_cpp":
+        if not base_url:
+            raise ValueError("Missing base URL for LLM provider 'llama_cpp'")
+        return LlamaCppProvider(base_url, model, max_tokens, temperature)
     raise ValueError(f"Unknown LLM provider: {provider}")
