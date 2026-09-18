@@ -10,6 +10,7 @@ A compact, production-oriented Retrieval-Augmented Generation (RAG) service desi
 - A persistent local vector store suitable for a small single-node deployment.
 - An HTTP API for ingestion, querying, service health, and index statistics.
 - A small, realistic support-policy corpus for a repeatable end-to-end demo.
+- A labeled RAG evaluation set with retrieval scoring, answer review, and paired run comparison.
 
 ## Architecture
 
@@ -162,11 +163,55 @@ Run the test suite with:
 pytest -v
 ```
 
-## Deployment notes
+## Recruiter demo on a small VPS
 
-Docker Compose is the recommended route for a small VPS. It mounts `storage/` for persistent ChromaDB data and `data/` for source documents. The repository also includes example systemd and nginx configurations under `deploy/`.
+Docker Compose runs one API worker and keeps ChromaDB and uploaded documents in `storage/`. It binds port 8000 to localhost. Put the included [nginx configuration](deploy/nginx.conf) in front of it, replace the domain, and enable HTTPS with certbot before sharing the site. The browser demo is at `/`.
 
-This is a technical demonstration, not yet a multi-tenant production system. The next planned improvements are stable document lifecycle management, retrieval evaluation, hybrid retrieval/reranking, CI, and operational metrics.
+In `.env`, set `ENVIRONMENT=prod`, a strong `API_KEY`, and `PUBLIC_DEMO_QUERY=true`. This makes only the query endpoint public; ingestion, document management, and statistics require `x-api-key`. Nginx limits public queries to five per minute per IP with a small burst. Uploads are capped at 5 MB by the app and nginx. Keep the API port blocked in the VPS firewall. Do not put the API key in browser code.
+
+For the smallest VPS, start with local embeddings and hosted answer generation. This avoids loading a second model for llama.cpp. If you choose local generation, run llama.cpp privately and measure memory and latency with the selected quantized model before promising a responsive demo. The Compose file does not start llama.cpp.
+
+```bash
+docker compose up -d --build
+docker compose exec rag-api python scripts/ingest.py --path /app/data/documents
+docker compose exec rag-api python scripts/evaluate.py --cases /app/data/evaluation/cases.json
+docker stats --no-stream rag-system
+```
+
+Back up `storage/` and `.env` before upgrades. The demo corpus in `data/documents/` is versioned; uploaded source files and the index are in `storage/`.
+
+## RAG evaluation
+
+The [labeled set](data/evaluation/cases.json) has 24 questions: 8 for development and 16 for a held-out test run. It covers direct facts, paraphrases, conditions, a two-document question, and questions the corpus cannot answer. Every answerable case has a reference answer and one or more exact evidence spans linked to source files. Gold spans are checked against the corpus before a run.
+
+```bash
+python scripts/ingest.py --path data/documents --reset
+python scripts/evaluate.py --split dev --output storage/evaluation/dev.json
+# Tune retrieval only on dev, then run test once with the selected settings:
+python scripts/evaluate.py --split test --output storage/evaluation/test-retrieval.json
+python scripts/evaluate.py --split test --generate --output storage/evaluation/test-answers.json
+```
+
+Retrieval scoring is deterministic: **evidence recall@k** is the fraction of required gold spans found in the top k passages, **hit@k** indicates whether any required span was found, and **MRR** rewards finding the first relevant passage early. The report keeps every passage, score, evidence rank, configuration, dataset and corpus hashes, and warm retrieval latency. It gives 95% bootstrap intervals across questions. These intervals describe this small question set; correlated questions and a tiny corpus limit wider generalization. Unanswerable questions have no gold retrieval passage, so they are excluded from retrieval success metrics.
+
+Generated answers require a separate [human review protocol](data/evaluation/REVIEW.md). The report records the exact answer and context. Reviewers score correctness against the reference, grounding in the supplied context, completeness, citation support, and abstention on unanswerable questions. Keyword overlap is deliberately absent from the quality score. Create and score reviews with:
+
+```bash
+python scripts/review_answers.py init storage/evaluation/test-answers.json storage/evaluation/reviewer-a.json --reviewer reviewer-a
+# Fill all applicable 0/1 judgments in reviewer-a.json, then:
+python scripts/review_answers.py score storage/evaluation/test-answers.json storage/evaluation/reviewer-a.json
+```
+
+For diagnosis, generate answers with gold source documents as context, then review those answers using the same rubric. If oracle-context answers succeed while normal RAG answers fail, retrieval is a likely bottleneck. If both fail, inspect the prompt or generator. Oracle runs on unanswerable cases are trivial because they receive no context, so compare answerable cases separately.
+
+```bash
+python scripts/evaluate.py --split test --generate --context oracle --output storage/evaluation/test-oracle.json
+python scripts/compare_runs.py storage/evaluation/test-retrieval.json storage/evaluation/candidate.json
+```
+
+The comparison script uses matched questions and paired bootstrap differences and lists gains and regressions. Keep the test set frozen while tuning; add a new held-out set if you revise questions or gold labels. This starter set is useful for regression checks, but a convincing public claim needs more independently authored questions, more documents, and ideally two reviewers with disagreements adjudicated. See the [BEIR retrieval metrics](https://github.com/beir-cellar/beir/wiki/Metrics-available), [RAGAS](https://aclanthology.org/2024.eacl-demo.16.pdf), and [ARES](https://aclanthology.org/2024.naacl-long.20.pdf) research for the decomposition into retrieval, faithfulness, and answer relevance.
+
+This is a single-node technical demonstration, not a multi-tenant service. Scanned PDFs need OCR, and document index updates are not transactional with file replacement. These are the main remaining ingestion limits. Hybrid retrieval and reranking should follow measured retrieval failures rather than being added by default.
 
 ## Project structure
 
