@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.api import routes
 from src.config import get_settings
@@ -26,14 +28,16 @@ class APIKeyMiddleware:
     def __init__(self, app, app_settings):
         self.app = app
         self._settings = app_settings
-        self._public_paths = {"/api/v1/health", "/docs", "/openapi.json"}
+        self._public_paths = {"/api/v1/health", "/docs", "/openapi.json", "/"}
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
-        if self._settings.api_key and scope["path"] not in self._public_paths:
+        is_demo_query = getattr(self._settings, "public_demo_query", False) and scope["path"] == "/api/v1/query" and scope["method"] == "POST"
+        is_static = scope["path"].startswith("/static/")
+        if self._settings.api_key and scope["path"] not in self._public_paths and not is_demo_query and not is_static:
             headers = dict(scope.get("headers", []))
             provided = headers.get(b"x-api-key", b"").decode("latin-1")
             if provided != self._settings.api_key:
@@ -49,6 +53,8 @@ class APIKeyMiddleware:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.environment == "prod" and not settings.api_key:
+        raise RuntimeError("API_KEY is required in production.")
     # Tests can inject a lightweight pipeline through FastAPI's dependency
     # overrides. Do not initialize the production embedding model in that case.
     pipeline = None
@@ -76,8 +82,9 @@ app.add_middleware(APIKeyMiddleware, app_settings=settings)
 
 
 app.include_router(routes.router, prefix="/api/v1")
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
 @app.get("/")
 def root():
-    return {"service": settings.app_name, "status": "running", "docs": "/docs"}
+    return FileResponse(Path(__file__).parent / "static" / "index.html")

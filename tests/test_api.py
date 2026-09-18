@@ -71,6 +71,24 @@ def test_query_requires_api_key_when_configured():
     assert asyncio.run(_middleware_response("/api/v1/query", "test-secret", "test-secret")) == 200
 
 
+def test_public_demo_query_does_not_expose_document_management():
+    settings = SimpleNamespace(api_key="test-secret", public_demo_query=True)
+    async def run(path):
+        messages = []
+        async def downstream(scope, receive, send):
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok"})
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+        async def send(message):
+            messages.append(message)
+        middleware = APIKeyMiddleware(downstream, settings)
+        await middleware({"type": "http", "path": path, "method": "POST", "headers": []}, receive, send)
+        return messages[0]["status"]
+    assert asyncio.run(run("/api/v1/query")) == 200
+    assert asyncio.run(run("/api/v1/ingest")) == 401
+
+
 def test_query_endpoint_returns_answer():
     mock_pipeline = _mock_pipeline()
     mock_pipeline.query.return_value = RAGAnswer(
@@ -102,7 +120,7 @@ def test_query_endpoint_hides_pipeline_error():
 def test_ingest_persists_uploaded_file_with_stable_identity(tmp_path, monkeypatch):
     mock_pipeline = _mock_pipeline()
     mock_pipeline.ingest_file.return_value = 2
-    monkeypatch.setattr(routes, "get_settings", lambda: SimpleNamespace(document_store_path=tmp_path))
+    monkeypatch.setattr(routes, "get_settings", lambda: SimpleNamespace(document_store_path=tmp_path, max_upload_bytes=5_000_000))
     upload = UploadFile(filename="refund-policy.md", file=BytesIO(b"Document content"))
 
     response = asyncio.run(routes.ingest(upload, mock_pipeline))
@@ -119,7 +137,7 @@ def test_ingest_persists_uploaded_file_with_stable_identity(tmp_path, monkeypatc
 def test_ingest_rejects_empty_documents_without_persisting_them(tmp_path, monkeypatch):
     mock_pipeline = _mock_pipeline()
     mock_pipeline.ingest_file.side_effect = ValueError("Document contains no extractable text.")
-    monkeypatch.setattr(routes, "get_settings", lambda: SimpleNamespace(document_store_path=tmp_path))
+    monkeypatch.setattr(routes, "get_settings", lambda: SimpleNamespace(document_store_path=tmp_path, max_upload_bytes=5_000_000))
     upload = UploadFile(filename="empty.md", file=BytesIO(b""))
 
     with pytest.raises(HTTPException) as exc_info:

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grounded answers · RAG demo</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <header><span class="eyebrow">RETRIEVAL AUGMENTED GENERATION</span><h1>Ask the policy documents.</h1>
+      <p>A small RAG system that retrieves evidence before generating an answer. Try a question or inspect the passages it used.</p></header>
+    <form id="ask-form">
+      <label for="question">Your question</label>
+      <div class="ask-row"><input id="question" maxlength="1000" required value="How long do I have to request a refund?">
+        <button type="submit">Ask</button></div>
+    </form>
+    <div class="examples">Try: <button data-question="When is express delivery available?">Express delivery</button>
+      <button data-question="How do I cancel my subscription?">Cancellation</button>
+      <button data-question="What is the customer support phone number?">Unknown answer</button></div>
+    <section id="result" hidden aria-live="polite"><h2>Answer</h2><p id="answer"></p><p id="source-list"></p>
+      <h2>Retrieved passages</h2><div id="chunks"></div></section>
+    <p id="status" role="status"></p>
+    <footer>Source code and evaluation method are documented in the project README. Answers may be imperfect; inspect the evidence below.</footer>
+  </main>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

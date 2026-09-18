@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_key: str | None = None  # protects the API when configured
+    public_demo_query: bool = False
+    max_upload_bytes: int = 5_000_000
 
 
 @lru_cache

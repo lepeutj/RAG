@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import tempfile
 from pathlib import Path
 
@@ -111,9 +110,17 @@ async def ingest(file: UploadFile, pipeline: RAGPipeline = Depends(get_pipeline)
     document_store_path.mkdir(parents=True, exist_ok=True)
     stored_path = document_store_path / f"{document_id}{suffix}"
 
+    max_bytes = get_settings().max_upload_bytes
     with tempfile.NamedTemporaryFile(dir=document_store_path, prefix=".upload-", suffix=suffix, delete=False) as tmp:
-        shutil.copyfileobj(file.file, tmp)
         tmp_path = Path(tmp.name)
+        size = 0
+        while block := file.file.read(1024 * 1024):
+            size += len(block)
+            if size > max_bytes:
+                tmp.close()
+                tmp_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="Document exceeds the upload limit.")
+            tmp.write(block)
 
     try:
         chunks_created = pipeline.ingest_file(
