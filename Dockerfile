@@ -2,20 +2,24 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Minimal system dependencies for compiling some machine-learning wheels.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/home/app/.cache/huggingface
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apt-get purge -y --auto-remove build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY src/ ./src/
-COPY scripts/ ./scripts/
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /app/storage "$HF_HOME" \
+    && chown -R app:app /app/storage /home/app
 
-# The sentence-transformers model is cached in this volume after first startup.
-VOLUME ["/app/storage", "/root/.cache"]
+COPY --chown=app:app src/ ./src/
+COPY --chown=app:app scripts/ ./scripts/
 
-EXPOSE 8000
+USER 10001:10001
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --no-server-header"]

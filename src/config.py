@@ -3,6 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,15 +41,20 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     llama_cpp_base_url: str = "http://127.0.0.1:8080/v1"
     llama_cpp_model: str = "local-model"
-    max_tokens: int = 1024
-    temperature: float = 0.2
+    max_tokens: int = Field(512, ge=1, le=2048)
+    temperature: float = Field(0.2, ge=0.0, le=2.0)
 
     # --- API ---
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_key: str | None = None  # protects the API when configured
     public_demo_query: bool = False
-    max_upload_bytes: int = 5_000_000
+    admin_api_enabled: bool = False
+    max_upload_bytes: int = Field(5_000_000, ge=1, le=10_000_000)
+
+    # --- Outbound calls ---
+    llm_timeout_seconds: float = Field(45.0, ge=1.0, le=120.0)
+    llm_max_retries: int = Field(1, ge=0, le=2)
 
 
 @lru_cache

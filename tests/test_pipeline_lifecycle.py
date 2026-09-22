@@ -5,6 +5,7 @@ import numpy as np
 from src.ingestion.chunker import Chunk
 from src.ingestion.loader import Document, document_id_for_source
 from src.pipeline import RAGPipeline
+from src.vectorstore.chroma_store import RetrievedChunk
 
 
 def test_reingestion_replaces_chunks_for_the_same_document():
@@ -31,3 +32,15 @@ def test_reingestion_replaces_chunks_for_the_same_document():
         [chunk],
         pipeline._embedder.embed.return_value,
     )
+
+
+def test_public_retrieve_does_not_initialize_llm():
+    pipeline = object.__new__(RAGPipeline)
+    pipeline._retriever = MagicMock()
+    expected = [RetrievedChunk(text="Evidence", source="doc.md", score=0.9, metadata={})]
+    pipeline._retriever.retrieve.return_value = expected
+    pipeline._llm = None
+
+    assert pipeline.retrieve("question", top_k=3) == expected
+    pipeline._retriever.retrieve.assert_called_once_with("question", top_k=3)
+    assert pipeline._llm is None

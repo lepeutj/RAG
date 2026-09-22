@@ -38,10 +38,11 @@ class LLMProvider(ABC):
 
 
 class AnthropicProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str, max_tokens: int, temperature: float):
+    def __init__(self, api_key: str, model: str, max_tokens: int, temperature: float,
+                 timeout: float, max_retries: int):
         from anthropic import Anthropic
 
-        self._client = Anthropic(api_key=api_key)
+        self._client = Anthropic(api_key=api_key, timeout=timeout, max_retries=max_retries)
         self._model = model
         self._max_tokens = max_tokens
         self._temperature = temperature
@@ -59,10 +60,11 @@ class AnthropicProvider(LLMProvider):
 
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str, max_tokens: int, temperature: float):
+    def __init__(self, api_key: str, model: str, max_tokens: int, temperature: float,
+                 timeout: float, max_retries: int):
         from openai import OpenAI
 
-        self._client = OpenAI(api_key=api_key)
+        self._client = OpenAI(api_key=api_key, timeout=timeout, max_retries=max_retries)
         self._model = model
         self._max_tokens = max_tokens
         self._temperature = temperature
@@ -84,7 +86,8 @@ class OpenAIProvider(LLMProvider):
 class LlamaCppProvider(LLMProvider):
     """Generate answers through a local llama.cpp OpenAI-compatible server."""
 
-    def __init__(self, base_url: str, model: str, max_tokens: int, temperature: float):
+    def __init__(self, base_url: str, model: str, max_tokens: int, temperature: float,
+                 timeout: float = 45.0, max_retries: int = 1):
         from openai import OpenAI
 
         normalized_base_url = base_url.rstrip("/")
@@ -93,7 +96,12 @@ class LlamaCppProvider(LLMProvider):
 
         # The OpenAI client requires a value, while llama.cpp does not require
         # authentication when it is bound to a local interface.
-        self._client = OpenAI(base_url=normalized_base_url, api_key="not-needed")
+        self._client = OpenAI(
+            base_url=normalized_base_url,
+            api_key="not-needed",
+            timeout=timeout,
+            max_retries=max_retries,
+        )
         self._model = model
         self._max_tokens = max_tokens
         self._temperature = temperature
@@ -119,17 +127,19 @@ def build_llm_provider(
     max_tokens: int,
     temperature: float,
     base_url: str | None = None,
+    timeout: float = 45.0,
+    max_retries: int = 1,
 ) -> LLMProvider:
     if provider == "anthropic":
         if not api_key:
             raise ValueError("Missing API key for LLM provider 'anthropic'")
-        return AnthropicProvider(api_key, model, max_tokens, temperature)
+        return AnthropicProvider(api_key, model, max_tokens, temperature, timeout, max_retries)
     if provider == "openai":
         if not api_key:
             raise ValueError("Missing API key for LLM provider 'openai'")
-        return OpenAIProvider(api_key, model, max_tokens, temperature)
+        return OpenAIProvider(api_key, model, max_tokens, temperature, timeout, max_retries)
     if provider == "llama_cpp":
         if not base_url:
             raise ValueError("Missing base URL for LLM provider 'llama_cpp'")
-        return LlamaCppProvider(base_url, model, max_tokens, temperature)
+        return LlamaCppProvider(base_url, model, max_tokens, temperature, timeout, max_retries)
     raise ValueError(f"Unknown LLM provider: {provider}")

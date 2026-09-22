@@ -37,6 +37,8 @@ def test_llama_cpp_normalizes_server_url_and_generates(monkeypatch):
     assert created_clients[0].kwargs == {
         "base_url": "http://127.0.0.1:8080/v1",
         "api_key": "not-needed",
+        "timeout": 45.0,
+        "max_retries": 1,
     }
     assert created_clients[0].completions.calls[0]["model"] == "local-model"
 

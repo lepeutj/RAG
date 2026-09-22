@@ -163,22 +163,13 @@ Run the test suite with:
 pytest -v
 ```
 
-## Recruiter demo on a small VPS
+## Public demo security
 
-Docker Compose runs one API worker and keeps ChromaDB and uploaded documents in `storage/`. It binds port 8000 to localhost. Put the included [nginx configuration](deploy/nginx.conf) in front of it, replace the domain, and enable HTTPS with certbot before sharing the site. The browser demo is at `/`.
+The target deployment is Google Cloud Run. The public service exposes the browser page, health check, static files, and query endpoint. Administrative document operations are disabled by default and return `404`; enabling them requires both `ADMIN_API_ENABLED=true` and an API key. Production also disables the interactive API documentation.
 
-In `.env`, set `ENVIRONMENT=prod`, a strong `API_KEY`, and `PUBLIC_DEMO_QUERY=true`. This makes only the query endpoint public; ingestion, document management, and statistics require `x-api-key`. Nginx limits public queries to five per minute per IP with a small burst. Uploads are capped at 5 MB by the app and nginx. Keep the API port blocked in the VPS firewall. Do not put the API key in browser code.
+Public queries are limited to five retrieved chunks and 1,000 non-whitespace characters. Outbound LLM requests have a timeout and bounded retries. The container runs as a non-root user and accepts Cloud Run's `$PORT`. See the [Cloud Run security profile](deploy/cloud-run-security.md) for service limits, IAM, Secret Manager, and release checks.
 
-For the smallest VPS, start with local embeddings and hosted answer generation. This avoids loading a second model for llama.cpp. If you choose local generation, run llama.cpp privately and measure memory and latency with the selected quantized model before promising a responsive demo. The Compose file does not start llama.cpp.
-
-```bash
-docker compose up -d --build
-docker compose exec rag-api python scripts/ingest.py --path /app/data/documents
-docker compose exec rag-api python scripts/evaluate.py --cases /app/data/evaluation/cases.json
-docker stats --no-stream rag-system
-```
-
-Back up `storage/` and `.env` before upgrades. The demo corpus in `data/documents/` is versioned; uploaded source files and the index are in `storage/`.
+Cloud Run storage is ephemeral. The public corpus and Chroma index will be packaged with the image in a separate deployment change; runtime ingestion is not part of the public demo.
 
 ## RAG evaluation
 

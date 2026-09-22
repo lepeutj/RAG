@@ -70,6 +70,8 @@ class RAGPipeline:
                 max_tokens=s.max_tokens,
                 temperature=s.temperature,
                 base_url=base_url,
+                timeout=s.llm_timeout_seconds,
+                max_retries=s.llm_max_retries,
             )
         return self._llm
 
@@ -139,7 +141,7 @@ class RAGPipeline:
         )
 
     def query(self, question: str, top_k: int | None = None) -> RAGAnswer:
-        chunks = self._retriever.retrieve(question, top_k=top_k)
+        chunks = self.retrieve(question, top_k=top_k)
 
         if not chunks:
             return RAGAnswer(
@@ -153,6 +155,10 @@ class RAGPipeline:
         sources = sorted({c.metadata.get("filename", c.source) for c in chunks})
 
         return RAGAnswer(answer=answer_text, sources=sources, retrieved_chunks=chunks)
+
+    def retrieve(self, question: str, top_k: int | None = None) -> list[RetrievedChunk]:
+        """Retrieve chunks without initializing or calling an LLM."""
+        return self._retriever.retrieve(question, top_k=top_k)
 
     def stats(self) -> dict:
         return {

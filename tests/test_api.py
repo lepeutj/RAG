@@ -11,7 +11,7 @@ from src import main
 from src.api import routes
 from src.api.schemas import QueryRequest
 from src.ingestion.loader import document_id_for_source
-from src.main import APIKeyMiddleware, app
+from src.main import SecurityMiddleware, app
 from src.pipeline import RAGAnswer
 from src.vectorstore.chroma_store import LegacyIndexError
 
@@ -20,7 +20,15 @@ def _mock_pipeline() -> MagicMock:
     return MagicMock()
 
 
-async def _middleware_response(path: str, api_key: str | None, supplied_key: str | None = None) -> int:
+async def _middleware_response(
+    path: str,
+    api_key: str | None,
+    supplied_key: str | None = None,
+    *,
+    method: str = "GET",
+    public_demo_query: bool = False,
+    admin_api_enabled: bool = False,
+) -> int:
     messages = []
 
     async def downstream(scope, receive, send):
@@ -34,8 +42,12 @@ async def _middleware_response(path: str, api_key: str | None, supplied_key: str
         messages.append(message)
 
     headers = [] if supplied_key is None else [(b"x-api-key", supplied_key.encode())]
-    middleware = APIKeyMiddleware(downstream, SimpleNamespace(api_key=api_key))
-    await middleware({"type": "http", "path": path, "headers": headers}, receive, send)
+    middleware = SecurityMiddleware(downstream, SimpleNamespace(
+        api_key=api_key,
+        public_demo_query=public_demo_query,
+        admin_api_enabled=admin_api_enabled,
+    ))
+    await middleware({"type": "http", "path": path, "method": method, "headers": headers}, receive, send)
     return messages[0]["status"]
 
 
@@ -67,26 +79,22 @@ def test_health_endpoint_is_public_when_api_key_is_configured():
 
 
 def test_query_requires_api_key_when_configured():
-    assert asyncio.run(_middleware_response("/api/v1/query", "test-secret")) == 401
-    assert asyncio.run(_middleware_response("/api/v1/query", "test-secret", "test-secret")) == 200
+    assert asyncio.run(_middleware_response("/api/v1/query", "test-secret", method="POST")) == 401
+    assert asyncio.run(_middleware_response("/api/v1/query", "test-secret", "test-secret", method="POST")) == 200
 
 
 def test_public_demo_query_does_not_expose_document_management():
-    settings = SimpleNamespace(api_key="test-secret", public_demo_query=True)
-    async def run(path):
-        messages = []
-        async def downstream(scope, receive, send):
-            await send({"type": "http.response.start", "status": 200, "headers": []})
-            await send({"type": "http.response.body", "body": b"ok"})
-        async def receive():
-            return {"type": "http.request", "body": b"", "more_body": False}
-        async def send(message):
-            messages.append(message)
-        middleware = APIKeyMiddleware(downstream, settings)
-        await middleware({"type": "http", "path": path, "method": "POST", "headers": []}, receive, send)
-        return messages[0]["status"]
-    assert asyncio.run(run("/api/v1/query")) == 200
-    assert asyncio.run(run("/api/v1/ingest")) == 401
+    assert asyncio.run(_middleware_response(
+        "/api/v1/query", None, method="POST", public_demo_query=True)) == 200
+    assert asyncio.run(_middleware_response(
+        "/api/v1/ingest", None, method="POST", public_demo_query=True)) == 404
+
+
+def test_enabled_admin_api_requires_key():
+    assert asyncio.run(_middleware_response(
+        "/api/v1/ingest", "test-secret", method="POST", admin_api_enabled=True)) == 401
+    assert asyncio.run(_middleware_response(
+        "/api/v1/ingest", "test-secret", "test-secret", method="POST", admin_api_enabled=True)) == 200
 
 
 def test_query_endpoint_returns_answer():
@@ -104,6 +112,13 @@ def test_query_endpoint_returns_answer():
 def test_query_request_rejects_empty_question():
     with pytest.raises(ValidationError):
         QueryRequest(question="")
+
+
+def test_query_request_rejects_whitespace_and_excessive_top_k():
+    with pytest.raises(ValidationError):
+        QueryRequest(question="   ")
+    with pytest.raises(ValidationError):
+        QueryRequest(question="test", top_k=6)
 
 
 def test_query_endpoint_hides_pipeline_error():

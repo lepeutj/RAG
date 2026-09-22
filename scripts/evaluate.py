@@ -63,13 +63,13 @@ def main() -> None:
     corpus_files = {path.name for path in args.corpus.iterdir() if path.suffix.lower() in {".txt", ".md", ".pdf"}}
     if indexed_files != corpus_files:
         parser.error(f"Index documents {sorted(indexed_files)} do not match corpus {sorted(corpus_files)}. Rebuild the index.")
-    pipeline._retriever.retrieve(cases[0]["question"], top_k=args.top_k)  # warmup
+    pipeline.retrieve(cases[0]["question"], top_k=args.top_k)  # warmup
     rows = []
     for case in cases:
         timings = []
         for _ in range(args.repeats):
             start = time.perf_counter()
-            chunks = pipeline._retriever.retrieve(case["question"], top_k=args.top_k)
+            chunks = pipeline.retrieve(case["question"], top_k=args.top_k)
             timings.append(round((time.perf_counter() - start) * 1000, 2))
         retrieved = [{"text": chunk.text,
                       "source": chunk.metadata.get("filename", Path(chunk.source).name),
