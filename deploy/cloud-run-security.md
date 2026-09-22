@@ -1,7 +1,7 @@
 # Cloud Run security profile
 
 The recruiter demo is a public read-only application. Its versioned corpus is
-public, and changing that corpus requires a new image. Runtime ingestion,
+public, and changing that corpus requires a new image. Runtime API ingestion,
 reindexing, deletion, document listing, and statistics are disabled.
 
 ## Required service settings
@@ -22,25 +22,25 @@ The container intentionally listens on `0.0.0.0:$PORT`; Cloud Run requires the
 ingress container to listen on all interfaces. External exposure is controlled
 by Cloud Run IAM and ingress, rather than by a host port mapping.
 
-Example deployment settings (replace placeholders and deploy only after the
-fixed Chroma index has been packaged into the image):
+Deploy the API as the ingress container and `chromadb/chroma:0.5.5` as a
+sidecar. Configure the API to depend on Chroma, give Chroma a TCP startup probe
+on port 8000, and set these API environment variables:
 
-```bash
-gcloud run deploy rag-demo \
-  --image europe-west1-docker.pkg.dev/PROJECT/rag/rag-demo:TAG \
-  --region europe-west1 \
-  --service-account rag-demo-runtime@PROJECT.iam.gserviceaccount.com \
-  --allow-unauthenticated \
-  --port 8080 \
-  --cpu 2 \
-  --memory 2Gi \
-  --concurrency 2 \
-  --max-instances 1 \
-  --min-instances 0 \
-  --timeout 60 \
-  --set-env-vars ENVIRONMENT=prod,PUBLIC_DEMO_QUERY=true,ADMIN_API_ENABLED=false,MAX_TOKENS=512,LLM_TIMEOUT_SECONDS=45,LLM_MAX_RETRIES=1 \
-  --set-secrets ANTHROPIC_API_KEY=rag-anthropic-api-key:latest
+```dotenv
+CHROMA_HOST=localhost
+CHROMA_PORT=8000
+DEMO_CORPUS_PATH=/app/data/documents
 ```
+
+Containers in one Cloud Run instance share a network, so Chroma remains
+unexposed while the API reaches it through `localhost`. The API image contains
+the public corpus and rebuilds the ephemeral index at startup.
+
+In the Cloud Run console, configure the API container with the Artifact
+Registry image, port 8080, the environment above, and the LLM secret. Add the
+Chroma image as the second container, then apply the service limits from the
+previous section. Cloud Run requires an explicit startup probe when container
+startup ordering is used.
 
 ## Release checks
 
@@ -55,7 +55,5 @@ After deployment, verify that:
 5. The Cloud Run revision uses the dedicated service account, concurrency 2,
    maximum instances 1, and the configured timeout.
 
-Cloud Run's writable filesystem is ephemeral and consumes instance memory.
-Do not rely on runtime uploads or a runtime-built Chroma index for persistence.
-The fixed index packaging step is a deployment task and is intentionally kept
-separate from this security change.
+Cloud Run's writable filesystem is ephemeral and consumes instance memory. The
+demo intentionally rebuilds its index after an instance replacement.

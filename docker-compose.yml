@@ -4,10 +4,12 @@ services:
     container_name: rag-system
     restart: unless-stopped
     env_file: .env
+    environment:
+      CHROMA_HOST: chroma
+      DEMO_CORPUS_PATH: /app/data/documents
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ./storage:/app/storage
       - ./data:/app/data
       - hf-cache:/home/app/.cache
     healthcheck:
@@ -15,6 +17,18 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    depends_on:
+      chroma:
+        condition: service_healthy
+
+  chroma:
+    image: chromadb/chroma:0.5.5
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   hf-cache:

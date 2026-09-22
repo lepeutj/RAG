@@ -98,6 +98,8 @@ async def lifespan(app: FastAPI):
     if routes.get_pipeline not in app.dependency_overrides:
         logger.info("Initializing the RAG pipeline (loading the embedding model, etc.)...")
         pipeline = RAGPipeline(settings)
+        if settings.demo_corpus_path is not None:
+            pipeline.ingest_directory(settings.demo_corpus_path)
         app.state.pipeline = pipeline
         app.dependency_overrides[routes.get_pipeline] = lambda: pipeline
         logger.info("Pipeline ready. %s", pipeline.stats())

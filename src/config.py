@@ -26,8 +26,11 @@ class Settings(BaseSettings):
 
     # --- Vector store ---
     vector_store_path: Path = Path("./storage/chroma")
+    chroma_host: str | None = None
+    chroma_port: int = Field(8000, ge=1, le=65535)
     document_store_path: Path = Path("./storage/documents")
     collection_name: str = "documents"
+    demo_corpus_path: Path | None = None
 
     # --- Retrieval ---
     top_k: int = 5

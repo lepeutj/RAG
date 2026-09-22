@@ -23,8 +23,18 @@ class RetrievedChunk:
 
 
 class ChromaVectorStore:
-    def __init__(self, persist_path: Path, collection_name: str):
-        self._client = chromadb.PersistentClient(path=str(persist_path))
+    def __init__(
+        self,
+        persist_path: Path,
+        collection_name: str,
+        host: str | None = None,
+        port: int = 8000,
+    ):
+        self._client = (
+            chromadb.HttpClient(host=host, port=port)
+            if host
+            else chromadb.PersistentClient(path=str(persist_path))
+        )
         self._collection_name = collection_name
         self._collection = self._get_or_create_collection()
 

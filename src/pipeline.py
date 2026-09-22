@@ -44,6 +44,8 @@ class RAGPipeline:
         self._vector_store = ChromaVectorStore(
             persist_path=settings.vector_store_path,
             collection_name=settings.collection_name,
+            host=settings.chroma_host,
+            port=settings.chroma_port,
         )
         self._retriever = Retriever(
             embedder=self._embedder,

@@ -1,13 +1,13 @@
 # RAG System
 
-A compact, production-oriented Retrieval-Augmented Generation (RAG) service designed to demonstrate the complete path from source documents to cited, grounded answers. It exposes a FastAPI API, stores embeddings in persistent ChromaDB, and supports local or OpenAI embeddings with Anthropic, OpenAI, or a local llama.cpp server for generation.
+A compact, production-oriented Retrieval-Augmented Generation (RAG) service designed to demonstrate the complete path from source documents to cited, grounded answers. It exposes a FastAPI API, stores embeddings in ChromaDB, and supports local or OpenAI embeddings with Anthropic, OpenAI, or a local llama.cpp server for generation.
 
 ## What this project demonstrates
 
 - A recursive text chunker implemented in the repository, with semantic separators and overlap.
 - Clear boundaries between document loading, chunking, embeddings, vector storage, retrieval, and generation.
 - Swappable embedding and LLM providers configured through environment variables rather than application code.
-- A persistent local vector store suitable for a small single-node deployment.
+- Embedded Chroma for local development and an HTTP Chroma sidecar for containers.
 - An HTTP API for ingestion, querying, service health, and index statistics.
 - A small, realistic support-policy corpus for a repeatable end-to-end demo.
 - A labeled RAG evaluation set with retrieval scoring, answer review, and paired run comparison.
@@ -54,16 +54,15 @@ Expected response:
 {"status":"ok"}
 ```
 
-The first startup downloads the sentence-transformers model and can take a few minutes. The model cache and ChromaDB data are kept in Docker volumes.
+The first startup downloads the sentence-transformers model and can take a few minutes. Docker Compose starts Chroma as an internal service and rebuilds the demo index when the API starts.
 
-### 3. Ingest the demonstration corpus
+### 3. Check the demonstration corpus
 
 ```bash
-docker compose exec rag-api python scripts/ingest.py --path /app/data/documents
 curl http://localhost:8000/api/v1/stats
 ```
 
-The corpus contains policies for refunds, delivery, and subscriptions. The `/stats` response should show a non-zero `chunks_indexed` value.
+The corpus contains policies for refunds, delivery, and subscriptions. It is ingested automatically by the container, so the `/stats` response should show a non-zero `chunks_indexed` value.
 
 ### 4. Run a grounded query
 
@@ -169,7 +168,7 @@ The target deployment is Google Cloud Run. The public service exposes the browse
 
 Public queries are limited to five retrieved chunks and 1,000 non-whitespace characters. Outbound LLM requests have a timeout and bounded retries. The container runs as a non-root user and accepts Cloud Run's `$PORT`. See the [Cloud Run security profile](deploy/cloud-run-security.md) for service limits, IAM, Secret Manager, and release checks.
 
-Cloud Run storage is ephemeral. The public corpus and Chroma index will be packaged with the image in a separate deployment change; runtime ingestion is not part of the public demo.
+The public corpus is packaged with the API image. Each Cloud Run instance rebuilds its ephemeral Chroma index during startup.
 
 ## RAG evaluation
 
@@ -211,7 +210,7 @@ src/
   api/           # FastAPI routes and schemas
   ingestion/     # loaders and recursive chunking
   embeddings/    # local and OpenAI embedding providers
-  vectorstore/   # persistent ChromaDB wrapper
+  vectorstore/   # embedded or HTTP ChromaDB wrapper
   retrieval/     # similarity retrieval
   generation/    # Anthropic, OpenAI, and llama.cpp LLM providers
 scripts/         # command-line ingestion

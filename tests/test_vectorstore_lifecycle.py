@@ -1,9 +1,20 @@
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 
 from src.ingestion.chunker import Chunk
 from src.vectorstore.chroma_store import ChromaVectorStore
+
+
+@patch("src.vectorstore.chroma_store.chromadb.HttpClient")
+def test_http_client_is_used_when_chroma_host_is_set(http_client):
+    client = http_client.return_value
+    client.get_or_create_collection.return_value = MagicMock()
+
+    ChromaVectorStore(Path("unused"), "documents", host="chroma", port=8000)
+
+    http_client.assert_called_once_with(host="chroma", port=8000)
 
 
 def test_replace_document_chunks_upserts_before_removing_stale_chunks():
