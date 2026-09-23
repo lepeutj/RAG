@@ -34,7 +34,12 @@ DEMO_CORPUS_PATH=/app/data/documents
 
 Containers in one Cloud Run instance share a network, so Chroma remains
 unexposed while the API reaches it through `localhost`. The API image contains
-the public corpus and rebuilds the ephemeral index at startup.
+only the three policy files named in `Dockerfile` and rebuilds the ephemeral
+index at startup. `.dockerignore` excludes evaluation files and other notes
+from the Docker build context. `.gcloudignore` applies the same file list when
+submitting source with `gcloud`. Before a source build, run
+`gcloud meta list-files-for-upload` and confirm it lists only the Dockerfile,
+requirements, application source, and three policy files.
 
 In the Cloud Run console, configure the API container with the Artifact
 Registry image, port 8080, the environment above, and the LLM secret. Add the
@@ -57,3 +62,34 @@ After deployment, verify that:
 
 Cloud Run's writable filesystem is ephemeral and consumes instance memory. The
 demo intentionally rebuilds its index after an instance replacement.
+
+## Finding failures
+
+The application writes no log file under `storage/`. Locally, use
+`docker compose logs rag-api` or `docker compose logs chroma`. Cloud Run
+collects each container's stdout and HTTP request logs in Cloud Logging; open
+the service's **Logs** tab or Logs Explorer. The default Cloud Logging bucket
+[retains logs for 30 days](https://docs.cloud.google.com/logging/docs/store-log-entries)
+unless its retention is changed.
+
+Application logs are JSON records; failure records have an `event` and
+`severity`, and HTTP failure records carry a request ID. The same ID is returned in
+the `x-request-id` response header. Search for that ID in Logs Explorer to
+connect an error response with the application record. Query
+failures include `stage` (`retrieval` or `generation`), exception class, the
+failing code location, and the upstream HTTP status when available. Successful
+queries report retrieval and generation time and the number of retrieved
+chunks. These application records omit
+questions, passages, answers, and exception messages.
+
+In Logs Explorer, filter on `resource.type="cloud_run_revision"` and the
+service name. Search `jsonPayload.event="query_failed"` for RAG errors or
+`jsonPayload.event="startup_failed"` when a revision does not become ready.
+The Chroma sidecar's logs are available under the same service and revision.
+If a request has no application failure record, inspect Cloud Run system logs
+for container startup, memory, or shutdown errors.
+Set a Cloud Monitoring alert for HTTP 5xx responses and startup failures with
+an email notification channel. Cloud Run does not create these alerts by
+itself. [Cloud Run logging](https://docs.cloud.google.com/run/docs/logging)
+and [log-based alerts](https://docs.cloud.google.com/logging/docs/alerting/log-based-alerts)
+describe the console setup.

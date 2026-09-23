@@ -11,6 +11,7 @@ venv/
 
 # Données générées / index vectoriel
 storage/
+notes/
 
 # Tests / cache
 .pytest_cache/

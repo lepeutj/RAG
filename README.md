@@ -39,7 +39,7 @@ cd RAG
 cp .env.example .env
 ```
 
-Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `.env`. Local embeddings are the default, so no embedding API key is required unless you set `EMBEDDING_PROVIDER=openai`.
+Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` and `PUBLIC_DEMO_QUERY=true` in `.env` to use the browser and query endpoint locally. Local embeddings are the default, so no embedding API key is required unless you set `EMBEDDING_PROVIDER=openai`.
 
 ### 2. Start the API with Docker
 
@@ -56,15 +56,9 @@ Expected response:
 
 The first startup downloads the sentence-transformers model and can take a few minutes. Docker Compose starts Chroma as an internal service and rebuilds the demo index when the API starts.
 
-### 3. Check the demonstration corpus
+The bundled corpus contains policies for refunds, delivery, and subscriptions and is ingested automatically when the API container starts.
 
-```bash
-curl http://localhost:8000/api/v1/stats
-```
-
-The corpus contains policies for refunds, delivery, and subscriptions. It is ingested automatically by the container, so the `/stats` response should show a non-zero `chunks_indexed` value.
-
-### 4. Run a grounded query
+### 3. Run a grounded query
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/query \
@@ -168,7 +162,10 @@ The target deployment is Google Cloud Run. The public service exposes the browse
 
 Public queries are limited to five retrieved chunks and 1,000 non-whitespace characters. Outbound LLM requests have a timeout and bounded retries. The container runs as a non-root user and accepts Cloud Run's `$PORT`. See the [Cloud Run security profile](deploy/cloud-run-security.md) for service limits, IAM, Secret Manager, and release checks.
 
+The API writes structured logs to stdout. A failed query records whether retrieval or generation failed, and every response includes an `x-request-id` header for finding its logs. Cloud Run alerts must be configured during deployment; see the operations section of the [Cloud Run profile](deploy/cloud-run-security.md#finding-failures).
+
 The public corpus is packaged with the API image. Each Cloud Run instance rebuilds its ephemeral Chroma index during startup.
+The image includes only the three policy files named in the [Dockerfile](Dockerfile); evaluation material and other local notes are excluded from the Docker build context. Git tracking is separate from image contents.
 
 ## RAG evaluation
 
@@ -199,7 +196,7 @@ python scripts/evaluate.py --split test --generate --context oracle --output sto
 python scripts/compare_runs.py storage/evaluation/test-retrieval.json storage/evaluation/candidate.json
 ```
 
-The comparison script uses matched questions and paired bootstrap differences and lists gains and regressions. Keep the test set frozen while tuning; add a new held-out set if you revise questions or gold labels. This starter set is useful for regression checks, but a convincing public claim needs more independently authored questions, more documents, and ideally two reviewers with disagreements adjudicated. See the [BEIR retrieval metrics](https://github.com/beir-cellar/beir/wiki/Metrics-available), [RAGAS](https://aclanthology.org/2024.eacl-demo.16.pdf), and [ARES](https://aclanthology.org/2024.naacl-long.20.pdf) research for the decomposition into retrieval, faithfulness, and answer relevance.
+The comparison script uses matched questions and paired bootstrap differences and lists gains and regressions. Keep the test set frozen while tuning; add a new held-out set if you revise questions or gold labels. This starter set is useful for regression checks, but a convincing public claim needs more independently authored questions, more documents, and ideally two reviewers with disagreements adjudicated.
 
 This is a single-node technical demonstration, not a multi-tenant service. Scanned PDFs need OCR, and document index updates are not transactional with file replacement. These are the main remaining ingestion limits. Hybrid retrieval and reranking should follow measured retrieval failures rather than being added by default.
 
@@ -216,5 +213,5 @@ src/
 scripts/         # command-line ingestion
 data/documents/  # reproducible demo corpus
 tests/           # unit and API contract tests
-deploy/          # nginx and systemd examples
+deploy/          # Cloud Run security and operations guide
 ```

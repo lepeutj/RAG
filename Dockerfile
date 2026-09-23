@@ -18,8 +18,7 @@ RUN useradd --create-home --uid 10001 app \
     && chown -R app:app /app/storage /home/app
 
 COPY --chown=app:app src/ ./src/
-COPY --chown=app:app scripts/ ./scripts/
-COPY --chown=app:app data/documents/ ./data/documents/
+COPY --chown=app:app data/documents/delivery-policy.md data/documents/refund-policy.md data/documents/subscription-policy.md ./data/documents/
 
 USER 10001:10001
 
