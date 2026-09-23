@@ -17,7 +17,10 @@ form.addEventListener('submit', async event => {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({question: question.value.trim()})
     });
-    if (!response.ok) throw new Error(`Request failed (${response.status}).`);
+    if (!response.ok) {
+      const reference = response.status >= 500 ? response.headers.get('x-request-id') : null;
+      throw new Error(`Request failed (${response.status})${reference ? `. Reference: ${reference}` : '.'}`);
+    }
     const data = await response.json();
     document.querySelector('#answer').textContent = data.answer;
     document.querySelector('#source-list').textContent = data.sources.length ? `Retrieved files: ${data.sources.join(', ')}` : 'No source found';

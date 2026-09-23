@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, sta
 
 from src.config import get_settings
 from src.ingestion.loader import document_id_for_source
+from src.observability import failure_fields
 from src.vectorstore.chroma_store import LegacyIndexError
 
 from src.api.schemas import (
@@ -67,14 +68,14 @@ def reindex_document(document_id: str, pipeline: RAGPipeline = Depends(get_pipel
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Document not found.") from exc
     except FileNotFoundError as exc:
-        logger.exception("Source file for document %s is missing", document_id)
+        logger.error("Document source is missing", extra=failure_fields(exc, event="reindex_failed"))
         raise HTTPException(status_code=409, detail="The stored source file is unavailable.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LegacyIndexError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Document reindexing failed for %s", document_id)
+        logger.error("Document reindexing failed", extra=failure_fields(exc, event="reindex_failed"))
         raise HTTPException(status_code=500, detail="An internal error occurred while reindexing the document.") from exc
 
     return IngestResponse(documents_processed=1, chunks_created=chunks_created)
@@ -85,7 +86,7 @@ def query(request: QueryRequest, pipeline: RAGPipeline = Depends(get_pipeline)) 
     try:
         result = pipeline.query(request.question, top_k=request.top_k)
     except Exception as exc:  # noqa: BLE001
-        logger.exception("RAG query processing failed")
+        # The pipeline records the failing stage and sanitized exception type.
         raise HTTPException(status_code=500, detail="An internal error occurred while processing the query.") from exc
 
     return QueryResponse(
@@ -135,7 +136,7 @@ async def ingest(file: UploadFile, pipeline: RAGPipeline = Depends(get_pipeline)
     except LegacyIndexError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Document ingestion failed for %s", original_name)
+        logger.error("Document ingestion failed", extra=failure_fields(exc, event="ingest_failed"))
         raise HTTPException(status_code=500, detail="An internal error occurred while ingesting the document.") from exc
     finally:
         tmp_path.unlink(missing_ok=True)

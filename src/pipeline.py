@@ -6,6 +6,7 @@ interfaces rather than their implementation details.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from src.embeddings.embedder import build_embedding_provider
 from src.generation.llm import build_llm_provider
 from src.ingestion.chunker import RecursiveChunker
 from src.ingestion.loader import DocumentLoader
+from src.observability import failure_fields
 from src.retrieval.retriever import Retriever
 from src.vectorstore.chroma_store import ChromaVectorStore, RetrievedChunk
 
@@ -96,18 +98,15 @@ class RAGPipeline:
             managed_storage=managed_storage,
             storage_path=storage_path,
         )
-        return self._ingest_documents([document], reject_empty=True)
+        return self._ingest_documents([document])
 
-    def _ingest_documents(self, documents, reject_empty: bool = False) -> int:
+    def _ingest_documents(self, documents) -> int:
         chunks_created = 0
         for document in documents:
             chunks = self._chunker.split_document(document)
             document_id = document.metadata["document_id"]
             if not chunks:
-                if reject_empty:
-                    raise ValueError("Document contains no extractable text.")
-                logger.warning("No chunks were created for %s.", document.source)
-                continue
+                raise ValueError("Document contains no extractable text.")
 
             embeddings = self._embedder.embed([chunk.text for chunk in chunks])
             self._vector_store.replace_document_chunks(document_id, chunks, embeddings)
@@ -143,20 +142,41 @@ class RAGPipeline:
         )
 
     def query(self, question: str, top_k: int | None = None) -> RAGAnswer:
-        chunks = self.retrieve(question, top_k=top_k)
+        stage = "retrieval"
+        started = time.perf_counter()
+        try:
+            chunks = self.retrieve(question, top_k=top_k)
+            retrieval_ms = round((time.perf_counter() - started) * 1000)
 
-        if not chunks:
-            return RAGAnswer(
-                answer="I could not find any relevant document to answer this question.",
-                sources=[],
-                retrieved_chunks=[],
-            )
+            if not chunks:
+                logger.info("Query completed without retrieved chunks", extra={
+                    "event": "query_completed", "duration_ms": retrieval_ms,
+                    "retrieval_ms": retrieval_ms, "generation_ms": 0, "retrieved_count": 0,
+                })
+                return RAGAnswer(
+                    answer="I could not find any relevant document to answer this question.",
+                    sources=[],
+                    retrieved_chunks=[],
+                )
 
-        llm = self._get_llm()
-        answer_text = llm.generate(question, chunks)
-        sources = sorted({c.metadata.get("filename", c.source) for c in chunks})
-
-        return RAGAnswer(answer=answer_text, sources=sources, retrieved_chunks=chunks)
+            stage = "generation"
+            generation_started = time.perf_counter()
+            llm = self._get_llm()
+            answer_text = llm.generate(question, chunks)
+            if not isinstance(answer_text, str) or not answer_text.strip():
+                raise ValueError("LLM returned an empty answer.")
+            sources = sorted({c.metadata.get("filename", c.source) for c in chunks})
+            answer = RAGAnswer(answer=answer_text, sources=sources, retrieved_chunks=chunks)
+            logger.info("Query completed", extra={
+                "event": "query_completed", "duration_ms": round((time.perf_counter() - started) * 1000),
+                "retrieval_ms": retrieval_ms,
+                "generation_ms": round((time.perf_counter() - generation_started) * 1000),
+                "retrieved_count": len(chunks),
+            })
+            return answer
+        except Exception as exc:
+            logger.error("RAG query failed", extra=failure_fields(exc, event="query_failed", stage=stage))
+            raise
 
     def retrieve(self, question: str, top_k: int | None = None) -> list[RetrievedChunk]:
         """Retrieve chunks without initializing or calling an LLM."""

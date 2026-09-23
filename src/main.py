@@ -1,12 +1,14 @@
 """FastAPI application entry point.
 
 Run locally with ``uvicorn src.main:app --reload``.
-For production, see ``deploy/rag-system.service`` or ``docker-compose.yml``.
+For production, see ``deploy/cloud-run-security.md``.
 """
 from __future__ import annotations
 
 import logging
 import secrets
+import sys
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,10 +18,16 @@ from fastapi.staticfiles import StaticFiles
 
 from src.api import routes
 from src.config import get_settings
+from src.observability import JsonFormatter, failure_fields, request_id
 from src.pipeline import RAGPipeline
 
 settings = get_settings()
-logging.basicConfig(level=settings.log_level, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+app_logger = logging.getLogger("src")
+app_logger.setLevel(settings.log_level)
+app_handler = logging.StreamHandler(sys.stdout)
+app_handler.setFormatter(JsonFormatter())
+app_logger.addHandler(app_handler)
+app_logger.propagate = False
 logger = logging.getLogger(__name__)
 
 
@@ -46,10 +54,17 @@ class SecurityMiddleware:
             await self.app(scope, receive, send)
             return
 
+        current_id = uuid.uuid4().hex
+        token = request_id.set(current_id)
+        response_started = False
+
         async def secure_send(message):
+            nonlocal response_started
             if message["type"] == "http.response.start":
+                response_started = True
                 headers = list(message.get("headers", []))
                 headers.extend([
+                    (b"x-request-id", current_id.encode("ascii")),
                     (b"x-content-type-options", b"nosniff"),
                     (b"referrer-policy", b"no-referrer"),
                     (b"x-frame-options", b"DENY"),
@@ -59,33 +74,46 @@ class SecurityMiddleware:
                 message["headers"] = headers
             await send(message)
 
-        path = scope["path"]
-        method = scope.get("method", "GET")
-        is_query = path == "/api/v1/query" and method == "POST"
-        is_public = path in self._public_paths or path.startswith("/static/")
+        try:
+            path = scope["path"]
+            method = scope.get("method", "GET")
+            is_query = path == "/api/v1/query" and method == "POST"
+            is_public = path in self._public_paths or path.startswith("/static/")
 
-        if self._is_admin_path(path):
-            if not self._settings.admin_api_enabled:
-                await self._response(status.HTTP_404_NOT_FOUND, "Not found.")(scope, receive, secure_send)
-                return
-            if not self._settings.api_key:
-                await self._response(status.HTTP_503_SERVICE_UNAVAILABLE, "Administrative API is unavailable.")(
-                    scope, receive, secure_send)
-                return
+            if self._is_admin_path(path):
+                if not self._settings.admin_api_enabled:
+                    await self._response(status.HTTP_404_NOT_FOUND, "Not found.")(scope, receive, secure_send)
+                    return
+                if not self._settings.api_key:
+                    await self._response(status.HTTP_503_SERVICE_UNAVAILABLE, "Administrative API is unavailable.")(
+                        scope, receive, secure_send)
+                    return
 
-        if is_query and self._settings.public_demo_query:
-            is_public = True
+            if is_query and self._settings.public_demo_query:
+                is_public = True
 
-        if not is_public:
-            headers = dict(scope.get("headers", []))
-            provided = headers.get(b"x-api-key", b"").decode("latin-1")
-            expected = self._settings.api_key or ""
-            if not provided or not secrets.compare_digest(provided, expected):
-                await self._response(status.HTTP_401_UNAUTHORIZED, "Missing or invalid API key.")(
-                    scope, receive, secure_send)
-                return
+            if not is_public:
+                headers = dict(scope.get("headers", []))
+                provided = headers.get(b"x-api-key", b"").decode("latin-1")
+                expected = self._settings.api_key or ""
+                if not provided or not secrets.compare_digest(provided, expected):
+                    await self._response(status.HTTP_401_UNAUTHORIZED, "Missing or invalid API key.")(
+                        scope, receive, secure_send)
+                    return
 
-        await self.app(scope, receive, secure_send)
+            await self.app(scope, receive, secure_send)
+        except Exception as exc:
+            logger.error("Unhandled HTTP failure", extra={
+                **failure_fields(exc, event="unhandled_http"),
+                "method": scope.get("method", "GET"),
+                "path": scope["path"],
+            })
+            if response_started:
+                raise
+            await self._response(status.HTTP_500_INTERNAL_SERVER_ERROR, "An internal error occurred.")(
+                scope, receive, secure_send)
+        finally:
+            request_id.reset(token)
 
 
 @asynccontextmanager
@@ -97,12 +125,18 @@ async def lifespan(app: FastAPI):
     pipeline = None
     if routes.get_pipeline not in app.dependency_overrides:
         logger.info("Initializing the RAG pipeline (loading the embedding model, etc.)...")
-        pipeline = RAGPipeline(settings)
-        if settings.demo_corpus_path is not None:
-            pipeline.ingest_directory(settings.demo_corpus_path)
-        app.state.pipeline = pipeline
-        app.dependency_overrides[routes.get_pipeline] = lambda: pipeline
-        logger.info("Pipeline ready. %s", pipeline.stats())
+        try:
+            pipeline = RAGPipeline(settings)
+            if settings.demo_corpus_path is not None:
+                chunks = pipeline.ingest_directory(settings.demo_corpus_path)
+                if chunks == 0:
+                    raise RuntimeError("The configured demo corpus produced no chunks.")
+            app.state.pipeline = pipeline
+            app.dependency_overrides[routes.get_pipeline] = lambda: pipeline
+            logger.info("Pipeline ready. %s", pipeline.stats())
+        except Exception as exc:
+            logger.error("Pipeline startup failed", extra=failure_fields(exc, event="startup_failed"))
+            raise RuntimeError("Pipeline startup failed; inspect the startup_failed log.") from None
 
     try:
         yield

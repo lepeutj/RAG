@@ -72,10 +72,7 @@ class DocumentLoader:
 
         for path in sorted(directory.rglob("*")):
             if path.is_file() and path.suffix in SUPPORTED_EXTENSIONS:
-                try:
-                    documents.append(self.load_file(path))
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Failed to load %s: %s", path, exc)
+                documents.append(self.load_file(path))
 
         logger.info("Loaded %d documents from %s", len(documents), directory)
         return documents

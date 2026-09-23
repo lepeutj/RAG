@@ -78,6 +78,46 @@ def test_health_endpoint_is_public_when_api_key_is_configured():
     assert asyncio.run(_middleware_response("/api/v1/health", "test-secret")) == 200
 
 
+def test_response_includes_request_id():
+    messages = []
+
+    async def downstream(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    middleware = SecurityMiddleware(downstream, SimpleNamespace(admin_api_enabled=False, api_key=None))
+    asyncio.run(middleware({"type": "http", "path": "/api/v1/health", "method": "GET"}, receive, send))
+
+    headers = dict(messages[0]["headers"])
+    assert len(headers[b"x-request-id"]) == 32
+
+
+def test_unhandled_failure_returns_generic_500_with_request_id():
+    messages = []
+
+    async def failing_app(scope, receive, send):
+        raise RuntimeError("private question")
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    middleware = SecurityMiddleware(failing_app, SimpleNamespace(admin_api_enabled=False, api_key=None))
+    asyncio.run(middleware({"type": "http", "path": "/api/v1/health", "method": "GET"}, receive, send))
+
+    assert messages[0]["status"] == 500
+    assert b"x-request-id" in dict(messages[0]["headers"])
+    assert b"private question" not in messages[1]["body"]
+
+
 def test_query_requires_api_key_when_configured():
     assert asyncio.run(_middleware_response("/api/v1/query", "test-secret", method="POST")) == 401
     assert asyncio.run(_middleware_response("/api/v1/query", "test-secret", "test-secret", method="POST")) == 200
