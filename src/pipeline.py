@@ -69,6 +69,8 @@ class RAGPipeline:
                 api_key, model, base_url = s.openrouter_api_key, s.openrouter_model, None
             elif s.llm_provider == "deepseek":
                 api_key, model, base_url = s.deepseek_api_key, s.deepseek_model, None
+            elif s.llm_provider == "mistral":
+                api_key, model, base_url = s.mistral_api_key, s.mistral_model, None
             else:
                 api_key, model, base_url = None, s.llama_cpp_model, s.llama_cpp_base_url
             self._llm = build_llm_provider(

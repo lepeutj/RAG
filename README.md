@@ -1,6 +1,6 @@
 # RAG System
 
-A compact, production-oriented Retrieval-Augmented Generation (RAG) service designed to demonstrate the complete path from source documents to cited, grounded answers. It exposes a FastAPI API, stores embeddings in ChromaDB, and supports local or OpenAI embeddings with Anthropic, OpenAI, OpenRouter, DeepSeek, or a local llama.cpp server for generation.
+A compact, production-oriented Retrieval-Augmented Generation (RAG) service designed to demonstrate the complete path from source documents to cited, grounded answers. It exposes a FastAPI API, stores embeddings in ChromaDB, and supports local or OpenAI embeddings with Anthropic, OpenAI, OpenRouter, DeepSeek, Mistral, or a local llama.cpp server for generation.
 
 ## What this project demonstrates
 
@@ -39,9 +39,9 @@ cd RAG
 cp .env.example .env
 ```
 
-Set `PUBLIC_DEMO_QUERY=true` in `.env`, then choose one generation provider and supply its key. The default is `LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`. For OpenAI, OpenRouter, or DeepSeek, set `LLM_PROVIDER` to `openai`, `openrouter`, or `deepseek` and set the matching `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `DEEPSEEK_API_KEY`. You can override the matching `*_MODEL` value; see [.env.example](.env.example). Local embeddings are the default, so an OpenAI embedding key is needed only when `EMBEDDING_PROVIDER=openai`.
+Set `PUBLIC_DEMO_QUERY=true` in `.env`, then choose one generation provider and supply its key. The default is `LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`. For OpenAI, OpenRouter, DeepSeek, or Mistral, set `LLM_PROVIDER` to `openai`, `openrouter`, `deepseek`, or `mistral` and set the matching `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, or `MISTRAL_API_KEY`. You can override the matching `*_MODEL` value; see [.env.example](.env.example). Local embeddings are the default, so an OpenAI embedding key is needed only when `EMBEDDING_PROVIDER=openai`.
 
-Keep API keys in `.env` locally or in Secret Manager on Cloud Run. The browser never receives them. OpenRouter uses its [OpenAI-compatible API](https://openrouter.ai/docs/quickstart), and DeepSeek uses its [OpenAI-compatible API](https://api-docs.deepseek.com/quick_start/pricing/), so neither needs another Python package.
+Keep API keys in `.env` locally or in Secret Manager on Cloud Run. The browser never receives them. OpenRouter uses its [OpenAI-compatible API](https://openrouter.ai/docs/quickstart), DeepSeek uses its [OpenAI-compatible API](https://api-docs.deepseek.com/quick_start/pricing/), and Mistral supports the [same client interface](https://docs.mistral.ai/resources/migration-guides), so no additional Python package is needed.
 DeepSeek answers use non-thinking mode to keep the response within this demo's token and timeout limits.
 
 ### 2. Start the API with Docker

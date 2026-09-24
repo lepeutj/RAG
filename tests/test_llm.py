@@ -66,6 +66,7 @@ def test_llama_cpp_provider_does_not_require_an_api_key(monkeypatch):
         ("openai", None, "gpt-4o-mini"),
         ("openrouter", "https://openrouter.ai/api/v1", "openai/gpt-4o-mini"),
         ("deepseek", "https://api.deepseek.com", "deepseek-flash"),
+        ("mistral", "https://api.mistral.ai/v1", "mistral-small-latest"),
     ],
 )
 def test_external_openai_compatible_provider_uses_its_own_key_and_endpoint(
@@ -104,7 +105,7 @@ def test_external_openai_compatible_provider_uses_its_own_key_and_endpoint(
         assert "extra_body" not in created_clients[0].completions.calls[0]
 
 
-@pytest.mark.parametrize("provider_name", ["openrouter", "deepseek"])
+@pytest.mark.parametrize("provider_name", ["openrouter", "deepseek", "mistral"])
 def test_external_provider_requires_its_api_key(provider_name):
     with pytest.raises(ValueError, match=f"Missing API key for LLM provider '{provider_name}'"):
         build_llm_provider(provider_name, None, "model", 64, 0.2)

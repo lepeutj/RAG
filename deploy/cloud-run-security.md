@@ -10,8 +10,8 @@ reindexing, deletion, document listing, and statistics are disabled.
 - Set `ENVIRONMENT=prod`, `PUBLIC_DEMO_QUERY=true`, and
   `ADMIN_API_ENABLED=false`.
 - Store the selected LLM API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-  `OPENROUTER_API_KEY`, or `DEEPSEEK_API_KEY`) in Secret Manager and expose it
-  only to the dedicated Cloud Run runtime service account.
+  `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, or `MISTRAL_API_KEY`) in Secret Manager
+  and expose it only to the dedicated Cloud Run runtime service account.
 - Start with 2 vCPU, 2 GiB memory, concurrency 2, maximum instances 1, minimum
   instances 0, and a 60 second request timeout. Revisit these values after load
   testing. Maximum instances is a cost guardrail, not an exact rate limiter.

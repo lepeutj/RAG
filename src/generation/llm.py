@@ -140,12 +140,13 @@ def build_llm_provider(
         if not api_key:
             raise ValueError("Missing API key for LLM provider 'anthropic'")
         return AnthropicProvider(api_key, model, max_tokens, temperature, timeout, max_retries)
-    if provider in {"openai", "openrouter", "deepseek"}:
+    if provider in {"openai", "openrouter", "deepseek", "mistral"}:
         if not api_key:
             raise ValueError(f"Missing API key for LLM provider '{provider}'")
         provider_urls = {
             "openrouter": "https://openrouter.ai/api/v1",
             "deepseek": "https://api.deepseek.com",
+            "mistral": "https://api.mistral.ai/v1",
         }
         return OpenAIProvider(api_key, model, max_tokens, temperature, timeout,
                               max_retries, base_url=provider_urls.get(provider),

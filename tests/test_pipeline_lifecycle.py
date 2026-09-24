@@ -63,6 +63,7 @@ def test_empty_document_stops_indexing():
     [
         ("openrouter", "openrouter_api_key", "openrouter_model"),
         ("deepseek", "deepseek_api_key", "deepseek_model"),
+        ("mistral", "mistral_api_key", "mistral_model"),
     ],
 )
 def test_pipeline_selects_external_provider_credentials(monkeypatch, provider, key_field, model_field):
