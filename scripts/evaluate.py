@@ -104,9 +104,10 @@ def main() -> None:
                    "embedding_model": settings.embedding_model_name,
                    "embedding_provider": settings.embedding_provider,
                    "llm_provider": settings.llm_provider if args.generate else None,
-                   "llm_model": (settings.anthropic_model if settings.llm_provider == "anthropic" else
-                                 settings.openai_model if settings.llm_provider == "openai" else
-                                 settings.llama_cpp_model) if args.generate else None,
+                   "llm_model": getattr(settings, f"{settings.llm_provider}_model") if args.generate else None,
+                   "llm_max_tokens": settings.max_tokens if args.generate else None,
+                   "llm_temperature": settings.temperature if args.generate else None,
+                   "deepseek_thinking": "disabled" if args.generate and settings.llm_provider == "deepseek" else None,
                    "similarity_threshold": settings.similarity_threshold,
                    "chunk_size": settings.chunk_size, "chunk_overlap": settings.chunk_overlap,
                    "chunks_indexed": pipeline.stats()["chunks_indexed"]},

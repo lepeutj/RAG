@@ -61,25 +61,31 @@ class AnthropicProvider(LLMProvider):
 
 class OpenAIProvider(LLMProvider):
     def __init__(self, api_key: str, model: str, max_tokens: int, temperature: float,
-                 timeout: float, max_retries: int):
+                 timeout: float, max_retries: int, base_url: str | None = None,
+                 extra_body: dict | None = None):
         from openai import OpenAI
 
-        self._client = OpenAI(api_key=api_key, timeout=timeout, max_retries=max_retries)
+        self._client = OpenAI(api_key=api_key, base_url=base_url,
+                              timeout=timeout, max_retries=max_retries)
         self._model = model
         self._max_tokens = max_tokens
         self._temperature = temperature
+        self._extra_body = extra_body
 
     def generate(self, query: str, chunks: list[RetrievedChunk]) -> str:
         prompt = build_prompt(query, chunks)
-        response = self._client.chat.completions.create(
-            model=self._model,
-            max_tokens=self._max_tokens,
-            temperature=self._temperature,
-            messages=[
+        request = {
+            "model": self._model,
+            "max_tokens": self._max_tokens,
+            "temperature": self._temperature,
+            "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-        )
+        }
+        if self._extra_body is not None:
+            request["extra_body"] = self._extra_body
+        response = self._client.chat.completions.create(**request)
         return response.choices[0].message.content
 
 
@@ -134,10 +140,16 @@ def build_llm_provider(
         if not api_key:
             raise ValueError("Missing API key for LLM provider 'anthropic'")
         return AnthropicProvider(api_key, model, max_tokens, temperature, timeout, max_retries)
-    if provider == "openai":
+    if provider in {"openai", "openrouter", "deepseek"}:
         if not api_key:
-            raise ValueError("Missing API key for LLM provider 'openai'")
-        return OpenAIProvider(api_key, model, max_tokens, temperature, timeout, max_retries)
+            raise ValueError(f"Missing API key for LLM provider '{provider}'")
+        provider_urls = {
+            "openrouter": "https://openrouter.ai/api/v1",
+            "deepseek": "https://api.deepseek.com",
+        }
+        return OpenAIProvider(api_key, model, max_tokens, temperature, timeout,
+                              max_retries, base_url=provider_urls.get(provider),
+                              extra_body={"thinking": {"type": "disabled"}} if provider == "deepseek" else None)
     if provider == "llama_cpp":
         if not base_url:
             raise ValueError("Missing base URL for LLM provider 'llama_cpp'")

@@ -1,7 +1,9 @@
 import sys
 from types import SimpleNamespace
 
-from src.generation.llm import LlamaCppProvider, build_llm_provider
+import pytest
+
+from src.generation.llm import LlamaCppProvider, OpenAIProvider, build_llm_provider
 
 
 class _FakeCompletions:
@@ -56,3 +58,53 @@ def test_llama_cpp_provider_does_not_require_an_api_key(monkeypatch):
     )
 
     assert isinstance(provider, LlamaCppProvider)
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "base_url", "model"),
+    [
+        ("openai", None, "gpt-4o-mini"),
+        ("openrouter", "https://openrouter.ai/api/v1", "openai/gpt-4o-mini"),
+        ("deepseek", "https://api.deepseek.com", "deepseek-flash"),
+    ],
+)
+def test_external_openai_compatible_provider_uses_its_own_key_and_endpoint(
+    monkeypatch, provider_name, base_url, model
+):
+    created_clients = []
+
+    def create_client(**kwargs):
+        client = _FakeOpenAI(**kwargs)
+        created_clients.append(client)
+        return client
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=create_client))
+    provider = build_llm_provider(
+        provider=provider_name,
+        api_key="provider-secret",
+        model=model,
+        max_tokens=64,
+        temperature=0.2,
+    )
+
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.generate("What is the policy?", []) == "Local answer."
+    assert created_clients[0].kwargs == {
+        "api_key": "provider-secret",
+        "base_url": base_url,
+        "timeout": 45.0,
+        "max_retries": 1,
+    }
+    assert created_clients[0].completions.calls[0]["model"] == model
+    if provider_name == "deepseek":
+        assert created_clients[0].completions.calls[0]["extra_body"] == {
+            "thinking": {"type": "disabled"}
+        }
+    else:
+        assert "extra_body" not in created_clients[0].completions.calls[0]
+
+
+@pytest.mark.parametrize("provider_name", ["openrouter", "deepseek"])
+def test_external_provider_requires_its_api_key(provider_name):
+    with pytest.raises(ValueError, match=f"Missing API key for LLM provider '{provider_name}'"):
+        build_llm_provider(provider_name, None, "model", 64, 0.2)

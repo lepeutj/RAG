@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from src.config import Settings
 from src.ingestion.chunker import Chunk
 from src.ingestion.loader import Document, document_id_for_source
 from src.pipeline import RAGPipeline
@@ -55,3 +56,33 @@ def test_empty_document_stops_indexing():
 
     with pytest.raises(ValueError, match="no extractable text"):
         pipeline._ingest_documents([document])
+
+
+@pytest.mark.parametrize(
+    ("provider", "key_field", "model_field"),
+    [
+        ("openrouter", "openrouter_api_key", "openrouter_model"),
+        ("deepseek", "deepseek_api_key", "deepseek_model"),
+    ],
+)
+def test_pipeline_selects_external_provider_credentials(monkeypatch, provider, key_field, model_field):
+    settings = Settings(_env_file=None, llm_provider=provider,
+                        **{key_field: "provider-secret", model_field: "chosen-model"})
+    pipeline = object.__new__(RAGPipeline)
+    pipeline._settings = settings
+    pipeline._llm = None
+    builder = MagicMock()
+    monkeypatch.setattr("src.pipeline.build_llm_provider", builder)
+
+    pipeline._get_llm()
+
+    builder.assert_called_once_with(
+        provider=provider,
+        api_key="provider-secret",
+        model="chosen-model",
+        max_tokens=settings.max_tokens,
+        temperature=settings.temperature,
+        base_url=None,
+        timeout=settings.llm_timeout_seconds,
+        max_retries=settings.llm_max_retries,
+    )

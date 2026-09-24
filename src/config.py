@@ -37,11 +37,15 @@ class Settings(BaseSettings):
     similarity_threshold: float = 0.0  # minimum similarity score to keep a chunk
 
     # --- Generation (LLM) ---
-    llm_provider: Literal["anthropic", "openai", "llama_cpp"] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "openrouter", "deepseek", "llama_cpp"] = "anthropic"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
+    openrouter_api_key: str | None = None
+    openrouter_model: str = "openai/gpt-4o-mini"
+    deepseek_api_key: str | None = None
+    deepseek_model: str = "deepseek-flash"
     llama_cpp_base_url: str = "http://127.0.0.1:8080/v1"
     llama_cpp_model: str = "local-model"
     max_tokens: int = Field(512, ge=1, le=2048)
